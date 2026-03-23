@@ -1,0 +1,1761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Re-Order Request Management</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f6fa;color:#222;line-height:1.5}
+.app{max-width:1320px;margin:0 auto;padding:0 20px 20px}
+
+/* Top Bar */
+.top-bar{background:#3a5bc7;color:#fff;padding:12px 28px;margin:0 -20px 16px;display:flex;align-items:center;gap:14px}
+.top-bar h1{font-size:16px;font-weight:700;letter-spacing:.3px}
+.top-bar .settings-icon{margin-left:auto;background:none;border:none;cursor:pointer;color:rgba(255,255,255,.8);display:flex;align-items:center}
+.top-bar .settings-icon:hover{color:#fff}
+.top-bar .settings-icon svg{width:20px;height:20px}
+
+/* List Screen */
+.screen{display:none}
+.screen.active{display:block}
+.list-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.list-header h2{font-size:20px;font-weight:700}
+.new-btn{background:#3a5bc7;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s}
+.new-btn:hover{background:#2d4aa8}
+.request-list{display:flex;flex-direction:column;gap:8px}
+.request-card{background:#fff;border-radius:10px;padding:16px 22px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;align-items:center;gap:16px;cursor:pointer;transition:box-shadow .15s;border:1px solid #e8eaef}
+.request-card:hover{box-shadow:0 3px 12px rgba(0,0,0,.12);border-color:#c0c8d8}
+.request-card .rc-info{flex:1}
+.request-card .rc-title{font-size:15px;font-weight:700;color:#222}
+.request-card .rc-sub{font-size:12px;color:#888;margin-top:2px}
+.request-card .rc-stats{display:flex;gap:16px;align-items:center;font-size:12px;color:#666}
+.request-card .rc-stats .stat{text-align:center}
+.request-card .rc-stats .stat .sv{font-size:16px;font-weight:700;color:#333}
+.request-card .rc-date{font-size:12px;color:#999;min-width:90px;text-align:right}
+.request-card .rc-del{background:#ff4d4f;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;opacity:.7;transition:opacity .15s}
+.request-card .rc-del:hover{opacity:1}
+.empty-state{text-align:center;padding:60px 20px;color:#999;font-size:15px}
+
+/* Editor Top Row */
+.editor-bar{background:#fff;border-radius:10px;padding:14px 22px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.editor-bar .back-btn,.editor-bar .save-btn,.editor-bar .del-btn-top{border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}
+.editor-bar .back-btn{background:#f0f2f5;color:#444}
+.editor-bar .back-btn:hover{background:#e2e5ea}
+.editor-bar .save-btn{background:#27ae60;color:#fff}
+.editor-bar .save-btn:hover{background:#219a52}
+.editor-bar .del-btn-top{background:#ff4d4f;color:#fff}
+.editor-bar .del-btn-top:hover{background:#d9363e}
+.editor-bar .ebar-info{flex:1}
+.editor-bar .ebar-title{font-size:16px;font-weight:700;color:#222}
+.editor-bar .ebar-sub{font-size:12px;color:#888}
+
+/* Header Fields */
+.app-header{background:#fff;border-radius:10px;padding:20px 28px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;flex-wrap:wrap;gap:14px;align-items:end}
+.app-header .field{display:flex;flex-direction:column;gap:3px}
+.app-header .field label{font-size:11px;font-weight:600;text-transform:uppercase;color:#666;letter-spacing:.4px}
+.app-header .field input{border:1px solid #d0d5dd;border-radius:6px;padding:6px 10px;font-size:14px;font-family:inherit;outline:none;transition:border .15s}
+.app-header .field input:focus{border-color:#4a7cff}
+.app-header .field.title-field input{font-weight:700;font-size:15px;width:280px}
+.app-header .field.subtitle-field input{width:240px}
+.app-header .field.date-field input{width:140px}
+
+/* Tabs */
+.tabs{display:flex;gap:0;margin-bottom:0;background:#fff;border-radius:10px 10px 0 0;box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:hidden}
+.tab-btn{flex:1;padding:13px 18px;border:none;background:#fff;font-size:14px;font-weight:600;color:#777;cursor:pointer;border-bottom:3px solid transparent;transition:all .15s}
+.tab-btn:hover{background:#f8f9fc;color:#444}
+.tab-btn.active{color:#4a7cff;border-bottom-color:#4a7cff;background:#f8faff}
+
+/* Panels */
+.tab-panel{display:none;background:#fff;border-radius:0 0 10px 10px;box-shadow:0 1px 4px rgba(0,0,0,.08);padding:24px 28px;margin-bottom:16px}
+.tab-panel.active{display:block}
+
+/* Data Entry */
+.section-title{font-size:16px;font-weight:700;margin:18px 0 10px;color:#333}
+.section-title:first-child{margin-top:0}
+.data-entry-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px}
+.data-entry-table th{background:#f0f2f5;padding:8px 6px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:#555;border-bottom:2px solid #ddd;white-space:nowrap}
+.data-entry-table td{padding:4px 4px;border-bottom:1px solid #eee;vertical-align:middle}
+.data-entry-table input,.data-entry-table select{width:100%;border:1px solid #e0e3e8;border-radius:4px;padding:5px 6px;font-size:13px;font-family:inherit;outline:none}
+.data-entry-table input:focus,.data-entry-table select:focus{border-color:#4a7cff}
+.data-entry-table input.readonly{background:#f8f9fa;color:#555;border-color:#eee}
+.data-entry-table .type-col{width:100px}
+.data-entry-table .type-col select{font-size:12px;padding:4px 6px}
+.data-entry-table .asin-col{width:130px}
+.data-entry-table .name-col{width:180px}
+.data-entry-table .narrow{width:70px}
+.data-entry-table .med{width:90px}
+.data-entry-table .cost-col{width:100px}
+.data-entry-table .ship-col{text-align:center}
+.data-entry-table .ship-col input[type=number]{width:60px;text-align:center}
+.data-entry-table .actions{width:40px;text-align:center}
+.del-btn{background:#ff4d4f;color:#fff;border:none;border-radius:4px;width:26px;height:26px;cursor:pointer;font-size:14px;line-height:1}
+.del-btn:hover{background:#d9363e}
+.add-row-btn,.action-btn{border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}
+.add-row-btn{background:#4a7cff;color:#fff;margin-right:8px}
+.add-row-btn:hover{background:#3a65d9}
+.action-btn{background:#f0f2f5;color:#444;margin-right:6px}
+.action-btn:hover{background:#e2e5ea}
+.action-btn.danger{background:#fff0f0;color:#d9363e}
+.action-btn.danger:hover{background:#ffdede}
+.action-btn.primary{background:#4a7cff;color:#fff}
+.action-btn.primary:hover{background:#3a65d9}
+.btn-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+
+/* Shipment Config */
+.shipment-config{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:18px}
+.shipment-box{border:1px solid #e0e3e8;border-radius:8px;padding:14px 16px;flex:1 1 300px;min-width:280px;position:relative}
+.shipment-box h3{font-size:14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+.shipment-box label{font-size:11px;font-weight:600;text-transform:uppercase;color:#666;display:block;margin-bottom:2px}
+.shipment-box input,.shipment-box select,.shipment-box textarea{width:100%;border:1px solid #ddd;border-radius:4px;padding:6px 8px;font-size:13px;font-family:inherit;margin-bottom:8px;outline:none}
+.shipment-box textarea{resize:vertical;height:50px}
+.shipment-box .row{display:flex;gap:8px}
+.shipment-box .row>div{flex:1}
+.shipment-remove{background:#ff4d4f;color:#fff;border:none;border-radius:4px;width:24px;height:24px;cursor:pointer;font-size:14px;line-height:1;flex-shrink:0}
+.shipment-remove:hover{background:#d9363e}
+.add-shipment-btn{background:#f0f2f5;color:#444;border:2px dashed #ccc;border-radius:8px;padding:14px 16px;flex:1 1 300px;min-width:280px;cursor:pointer;font-size:14px;font-weight:600;text-align:center;transition:all .15s;display:flex;align-items:center;justify-content:center;min-height:100px}
+.add-shipment-btn:hover{background:#e8eaef;border-color:#aaa}
+
+/* View tables */
+.view-header{text-align:center;margin-bottom:20px}
+.view-header h1{font-size:20px;font-weight:800;letter-spacing:.5px;color:#222}
+.view-header h2{font-size:15px;font-weight:600;color:#555;margin-top:2px}
+.view-header .date-line{font-size:13px;color:#777;margin-top:4px}
+.shipment-section{margin-bottom:24px}
+.shipment-section h3{font-size:15px;font-weight:700;padding:10px 14px;border-radius:6px;margin-bottom:4px}
+.shipment-section h3.total{background:#7D3C98;color:#fff}
+.shipment-section.total-section{background:#f5f0ff;border-radius:8px;padding:16px;margin-bottom:24px}
+.shipment-section.total-section .view-table th{background:#e8daf0;color:#4a235a}
+.shipment-section.total-section .view-table td{border-bottom-color:#e0d0ec}
+.shipment-section.total-section .view-table tr.grandtotal td{background:#e0cff0;color:#4a235a}
+.shipment-section .desc{font-size:13px;color:#666;padding:0 14px 8px;font-style:italic}
+.view-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px}
+.view-table th{background:#f8f9fc;padding:8px 10px;text-align:left;font-weight:600;font-size:12px;border-bottom:2px solid #ddd;color:#444}
+.view-table td{padding:7px 10px;border-bottom:1px solid #eee}
+.view-table tr.subtotal td,.view-table tr.grandtotal td{font-weight:700;border-top:2px solid #bbb;background:#fafbfc}
+.view-table tr.grandtotal td{background:#f0f2f5;font-size:14px}
+.view-table td.num,.view-table th.num{text-align:right}
+.notes-block{margin-top:16px;padding:12px 16px;background:#fffbeb;border-left:4px solid #f0c040;border-radius:4px;font-size:13px;color:#7a6a00;white-space:pre-wrap}
+
+/* Summary */
+.summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
+.summary-card{background:#f8f9fc;border-radius:8px;padding:16px 20px;border:1px solid #e8eaef}
+.summary-card h4{font-size:12px;text-transform:uppercase;color:#888;margin-bottom:6px;letter-spacing:.4px}
+.summary-card .val{font-size:24px;font-weight:700;color:#333}
+.summary-card .sub{font-size:12px;color:#777;margin-top:2px}
+.summary-breakdown{margin-top:18px}
+.summary-breakdown table{width:100%;border-collapse:collapse;font-size:13px}
+.summary-breakdown th{text-align:left;padding:8px 10px;background:#f0f2f5;font-weight:600;border-bottom:2px solid #ddd}
+.summary-breakdown th.num{text-align:right}
+.summary-breakdown td{padding:7px 10px;border-bottom:1px solid #eee}
+.summary-breakdown td.num{text-align:right}
+.summary-breakdown table{table-layout:fixed}
+.summary-breakdown th:first-child,.summary-breakdown td:first-child{width:40%}
+.summary-breakdown th.num,.summary-breakdown td.num{width:12%}
+.summary-notes textarea{width:100%;border:1px solid #ddd;border-radius:6px;padding:10px;font-size:13px;font-family:inherit;height:100px;resize:vertical;margin-top:12px;outline:none}
+.summary-notes textarea:focus{border-color:#4a7cff}
+
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:#fff;border-radius:12px;padding:24px 28px;width:440px;max-width:92vw;box-shadow:0 8px 30px rgba(0,0,0,.15)}
+.modal h3{font-size:17px;margin-bottom:14px}
+.modal label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;color:#666;margin-bottom:3px}
+.modal input,.modal select{width:100%;border:1px solid #ddd;border-radius:6px;padding:8px 10px;font-size:14px;font-family:inherit;margin-bottom:14px;outline:none}
+.modal input:focus{border-color:#4a7cff}
+.modal .modal-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+.modal .modal-btns button{padding:8px 18px;border-radius:6px;border:none;font-size:13px;font-weight:600;cursor:pointer}
+.modal .modal-btns .cancel-btn{background:#f0f2f5;color:#444}
+.modal .modal-btns .save-btn{background:#4a7cff;color:#fff}
+.lookup-status{font-size:11px;margin-left:4px}
+.lookup-status.ok{color:#27ae60}
+.lookup-status.err{color:#d9363e}
+.lookup-status.loading{color:#e6a817}
+input[type=number]::-webkit-inner-spin-button{opacity:1}
+.ref-badge{display:inline-block;background:#e8eaef;color:#555;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;letter-spacing:.5px;font-family:'Courier New',monospace;vertical-align:middle;margin-right:6px}
+.ref-id-badge{background:#edf2ff;color:#3a5bc7;font-size:13px;font-weight:700;padding:4px 12px;border-radius:6px;letter-spacing:.5px;font-family:'Courier New',monospace}
+.push-btn{background:#7d3c98;color:#fff;border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}
+.push-btn:hover{background:#6c2d87}
+.push-btn:disabled{opacity:.6;cursor:not-allowed}
+.push-status{font-size:11px;margin-left:4px}
+.push-status.ok{color:#27ae60}
+.push-status.err{color:#d9363e}
+.rc-pushed{font-size:10px;color:#27ae60}
+.at-section-title{font-size:14px;font-weight:700;color:#27ae60;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.at-card{background:#fff;border-radius:10px;padding:16px 22px;box-shadow:0 1px 4px rgba(0,0,0,.08);border:1px solid #d4edda;margin-bottom:8px;cursor:pointer;transition:box-shadow .15s}
+.at-card:hover{box-shadow:0 3px 12px rgba(0,0,0,.12)}
+.at-card .at-title{font-weight:700;font-size:14px}
+.at-card .at-sub{font-size:12px;color:#888;margin-top:2px}
+.at-card .at-stats{display:flex;gap:16px;margin-top:8px}
+.at-card .at-stat{text-align:center}
+.at-card .at-stat .sv{font-size:16px;font-weight:700;color:#3a5bc7}
+.at-card .at-stat small{font-size:10px;color:#888;display:block}
+.at-badge{display:inline-block;background:#edf2ff;color:#3a5bc7;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;font-family:'Courier New',monospace;margin-right:6px}
+.at-status{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:8px}
+.at-readonly{display:inline-block;font-size:9px;background:#fff3e0;color:#e65100;padding:2px 6px;border-radius:4px;font-weight:600;margin-left:6px}
+.at-detail{background:#f8f9fc;border-radius:10px;padding:20px;border:1px solid #d4edda;margin-bottom:16px}
+.at-detail h3{font-size:16px;margin-bottom:12px;color:#3a5bc7}
+.at-detail table{width:100%;border-collapse:collapse;font-size:12px}
+.at-detail th{background:#3a5bc7;color:#fff;padding:8px 12px;text-align:left;font-weight:600}
+.at-detail td{padding:6px 12px;border-bottom:1px solid #e0e3e8}
+.at-detail .shipment-header{background:#27ae60;color:#fff;padding:8px 12px;font-weight:700;font-size:13px;border-radius:6px 6px 0 0;margin-top:16px}
+.at-detail .shipment-header.s2{background:#7d3c98}
+.at-detail .subtotal td{font-weight:700;background:#f0f2f5}
+.at-back-btn{background:#3a5bc7;color:#fff;border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- Top Bar -->
+<div class="top-bar">
+  <h1>Re-Order Request Management</h1>
+  <button class="settings-icon" onclick="openSettings()" title="Settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </button>
+</div>
+
+<!-- ======== LIST SCREEN ======== -->
+<div class="screen active" id="listScreen">
+  <div class="list-header">
+    <h2>All Re-Order Requests</h2>
+    <div style="display:flex;gap:8px">
+      <button class="new-btn" style="background:#27ae60" onclick="loadFromAirtable()">&#8595; Load from Airtable</button>
+      <button class="new-btn" onclick="createNewRequest()">+ New Request</button>
+    </div>
+  </div>
+  <div id="airtableRequests" style="margin-bottom:16px"></div>
+  <div class="request-list" id="requestList"></div>
+</div>
+
+<!-- ======== EDITOR SCREEN ======== -->
+<div class="screen" id="editorScreen">
+
+  <!-- Editor Bar -->
+  <div class="editor-bar">
+    <button class="back-btn" onclick="goBackToList()">Back</button>
+    <div class="ebar-info">
+      <div class="ebar-title" id="ebarTitle"></div>
+      <div class="ebar-sub" id="ebarSub"></div>
+    </div>
+    <span class="ref-id-badge" id="ebarRefId"></span>
+    <button class="save-btn" onclick="saveCurrentRequest()">Save</button>
+    <button class="push-btn" onclick="pushToAirtable()">&#8593; Push to Airtable</button>
+    <span class="push-status" id="pushStatus"></span>
+    <button class="del-btn-top" onclick="deleteCurrentRequest()">Delete</button>
+  </div>
+
+  <!-- Header Fields -->
+  <div class="app-header">
+    <div class="field title-field">
+      <label>Title</label>
+      <input id="hdrTitle" value="REORDER &amp; SHIPMENT PLAN">
+    </div>
+    <div class="field subtitle-field">
+      <label>Subtitle</label>
+      <input id="hdrSubtitle" value="DOT and Pearl Reorder">
+    </div>
+    <div class="field date-field">
+      <label>Date</label>
+      <input type="date" id="hdrDate">
+    </div>
+    <div class="field" style="min-width:180px">
+      <label>Exchange Rate (1 CNY → USD)</label>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="number" id="hdrExRate" step="0.0001" min="0" style="width:100px">
+        <button class="action-btn" id="exRateFetchBtn" onclick="fetchAndSetExchangeRate()" style="padding:5px 10px;font-size:11px;white-space:nowrap">Fetch Live</button>
+        <span id="exRateStatus" style="font-size:10px;color:#888"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="entry" onclick="switchTab('entry')">Data Entry</button>
+    <button class="tab-btn" data-tab="ohad" onclick="switchTab('ohad')">Sir Ohad View</button>
+    <button class="tab-btn" data-tab="supplier" onclick="switchTab('supplier')">Supplier View</button>
+    <button class="tab-btn" data-tab="summary" onclick="switchTab('summary')">Summary</button>
+  </div>
+
+  <!-- Data Entry Tab -->
+  <div class="tab-panel active" id="panel-entry">
+    <div class="section-title">Shipment Configuration</div>
+    <div class="shipment-config" id="shipmentConfigContainer"></div>
+
+    <div class="section-title">Items</div>
+    <div style="overflow-x:auto">
+    <table class="data-entry-table" id="itemsTable">
+      <thead id="itemsHead"></thead>
+      <tbody id="itemsBody"></tbody>
+    </table>
+    </div>
+    <div class="btn-row">
+      <button class="add-row-btn" onclick="addItemRow()">+ Add Item</button>
+    </div>
+  </div>
+
+  <!-- Sir Ohad View -->
+  <div class="tab-panel" id="panel-ohad">
+    <div class="btn-row" style="margin-bottom:14px">
+      <button class="action-btn primary" onclick="downloadExcel('ohad')">Download Excel (Sir Ohad)</button>
+      <button class="action-btn primary" onclick="downloadExcel('both')">Download Both Views</button>
+    </div>
+    <div id="ohadContent"></div>
+  </div>
+
+  <!-- Supplier View -->
+  <div class="tab-panel" id="panel-supplier">
+    <div class="btn-row" style="margin-bottom:14px">
+      <button class="action-btn primary" onclick="downloadExcel('supplier')">Download Excel (Supplier)</button>
+      <button class="action-btn primary" onclick="downloadExcel('both')">Download Both Views</button>
+    </div>
+    <div id="supplierContent"></div>
+  </div>
+
+  <!-- Summary Tab -->
+  <div class="tab-panel" id="panel-summary">
+    <div id="summaryContent"></div>
+    <div class="summary-notes">
+      <label style="font-size:12px;font-weight:600;text-transform:uppercase;color:#666">Notes / Remarks</label>
+      <textarea id="summaryNotes" placeholder="e.g. MOQ requirement: 24,000 pcs"></textarea>
+    </div>
+  </div>
+
+</div><!-- end editorScreen -->
+</div><!-- end app -->
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <h3>Settings</h3>
+    <label>Airtable Personal Access Token</label>
+    <input type="password" id="airtablePAT" placeholder="pat...">
+    <p style="font-size:11px;color:#999;margin:-10px 0 14px">Your token is stored locally in your browser only.</p>
+    <div class="modal-btns">
+      <button class="cancel-btn" onclick="closeSettings()">Cancel</button>
+      <button class="save-btn" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Constants ──
+const BASE_ID = 'appIi4INnoNSh9kru';
+const TABLE_ID = 'tblLixRBZkc3IViAG';
+const FIELD_IDS = {
+  asin: 'fldHKfptk2JX7BUHb',
+  name: 'flddTbwZaTAcoCQfk',
+  upc: 'fldmq4nA7m6uYWioo',
+  packQty: 'fldpsVMUPCz3JvYYn',
+  masterSku: 'fldYoqEElKrjS3S7t',
+  costRmb: 'fldSc8CgYfqydf9Vf',
+  yunDesc: 'fldffzSXF7Tsjs8xD'
+};
+
+// ── Shipment Color Palette ──
+const SHIPMENT_PALETTE = [
+  { bg: '#27AE60', light: '#eafaf1', xlBg: '27AE60', xlLight: 'EAFAF1', viewBg: '#eafaf1', viewColor: '#1e8449' },
+  { bg: '#7D3C98', light: '#f4ecf7', xlBg: '7D3C98', xlLight: 'F4ECF7', viewBg: '#f4ecf7', viewColor: '#6c2d87' },
+  { bg: '#E67E22', light: '#fdf2e9', xlBg: 'E67E22', xlLight: 'FDF2E9', viewBg: '#fdf2e9', viewColor: '#a35a15' },
+  { bg: '#2980B9', light: '#ebf5fb', xlBg: '2980B9', xlLight: 'EBF5FB', viewBg: '#ebf5fb', viewColor: '#1a5276' },
+  { bg: '#C0392B', light: '#fadbd8', xlBg: 'C0392B', xlLight: 'FADBD8', viewBg: '#fadbd8', viewColor: '#922b21' },
+  { bg: '#16A085', light: '#e8f8f5', xlBg: '16A085', xlLight: 'E8F8F5', viewBg: '#e8f8f5', viewColor: '#0e6655' },
+  { bg: '#8E44AD', light: '#f5eef8', xlBg: '8E44AD', xlLight: 'F5EEF8', viewBg: '#f5eef8', viewColor: '#6c3483' },
+  { bg: '#D4AC0D', light: '#fef9e7', xlBg: 'D4AC0D', xlLight: 'FEF9E7', viewBg: '#fef9e7', viewColor: '#9a7d0a' },
+];
+
+function getShipmentColor(idx) {
+  return SHIPMENT_PALETTE[idx % SHIPMENT_PALETTE.length];
+}
+
+// ── State ──
+let items = [];
+let idCounter = 0;
+let shipments = [];
+let shipmentIdCounter = 0;
+let liveExchangeRate = 0.1381;
+let currentRequestId = null;
+let currentRefId = null;
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', () => {
+  migrateOldData();
+  renderRequestList();
+  fetchExchangeRate();
+});
+
+// Migrate old single-request localStorage to new multi-request format
+function migrateOldData() {
+  const old = localStorage.getItem('reorder_state');
+  if (old && !localStorage.getItem('reorder_requests')) {
+    try {
+      const state = JSON.parse(old);
+      const id = Date.now().toString();
+      const requests = [{ id, createdAt: new Date().toISOString(), state }];
+      localStorage.setItem('reorder_requests', JSON.stringify(requests));
+      localStorage.removeItem('reorder_state');
+    } catch(e) {}
+  }
+}
+
+// Migrate old 2-shipment state to N-shipment format
+function migrateStateToNShipments(s) {
+  if (!s) return s;
+  if (s.shipments) return s; // already migrated
+
+  s.shipments = [
+    { id: 1, method: s.s1Method || 'AIR', destination: s.s1Dest || 'FBA (USA)', label: s.s1Label || '', description: s.s1Desc || 'Priority replenishment' },
+    { id: 2, method: s.s2Method || 'SEA', destination: s.s2Dest || 'AWD (USA)', label: s.s2Label || '', description: s.s2Desc || 'Bulk replenishment for all ASINs' }
+  ];
+  s.shipmentIdCounter = 2;
+
+  if (s.items) {
+    s.items.forEach(item => {
+      if (!item.units) {
+        item.units = {};
+        if (item.s1Units) item.units[1] = item.s1Units;
+        if (item.s2Units) item.units[2] = item.s2Units;
+        delete item.s1Units;
+        delete item.s2Units;
+      }
+    });
+  }
+
+  delete s.s1Method; delete s.s1Dest; delete s.s1Label; delete s.s1Desc;
+  delete s.s2Method; delete s.s2Dest; delete s.s2Label; delete s.s2Desc;
+  return s;
+}
+
+async function fetchExchangeRate() {
+  try {
+    const resp = await fetch('https://open.er-api.com/v6/latest/CNY');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.rates && data.rates.USD) {
+      const rate = data.rates.USD;
+      if (rate >= 0.05 && rate <= 0.30) {
+        liveExchangeRate = rate;
+        // Only auto-set if user hasn't manually set a rate for this request
+        if (currentRequestId) {
+          const exRateInput = document.getElementById('hdrExRate');
+          if (!exRateInput.value || exRateInput.dataset.autoSet === 'true') {
+            exRateInput.value = rate.toFixed(4);
+            exRateInput.dataset.autoSet = 'true';
+            updateExRateStatus('Live rate fetched');
+          }
+          renderItems(); refreshViews();
+        }
+      } else {
+        console.warn('Exchange rate API returned suspicious value:', rate, '— using fallback', liveExchangeRate);
+      }
+    }
+  } catch(e) {}
+}
+
+async function fetchAndSetExchangeRate() {
+  const btn = document.getElementById('exRateFetchBtn');
+  btn.textContent = 'Fetching...';
+  btn.disabled = true;
+  try {
+    const resp = await fetch('https://open.er-api.com/v6/latest/CNY');
+    if (!resp.ok) { updateExRateStatus('API error'); return; }
+    const data = await resp.json();
+    if (data.rates && data.rates.USD) {
+      const rate = data.rates.USD;
+      if (rate >= 0.05 && rate <= 0.30) {
+        liveExchangeRate = rate;
+        document.getElementById('hdrExRate').value = rate.toFixed(4);
+        document.getElementById('hdrExRate').dataset.autoSet = 'true';
+        updateExRateStatus('Live rate set');
+        renderItems(); refreshViews();
+        autoSaveCurrentRequest();
+      } else {
+        updateExRateStatus('Bad rate from API');
+      }
+    }
+  } catch(e) {
+    updateExRateStatus('Network error');
+  } finally {
+    btn.textContent = 'Fetch Live';
+    btn.disabled = false;
+  }
+}
+
+function updateExRateStatus(msg) {
+  document.getElementById('exRateStatus').textContent = msg;
+}
+
+function getActiveExchangeRate() {
+  const val = parseFloat(document.getElementById('hdrExRate').value);
+  return (val && val > 0) ? val : liveExchangeRate;
+}
+
+// ── Request Storage ──
+function getAllRequests() {
+  try { return JSON.parse(localStorage.getItem('reorder_requests')) || []; } catch(e) { return []; }
+}
+function saveAllRequests(reqs) {
+  localStorage.setItem('reorder_requests', JSON.stringify(reqs));
+}
+
+// ── List Screen ──
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(name + 'Screen').classList.add('active');
+}
+
+function getItemTotalUnits(item) {
+  if (item.units) return Object.values(item.units).reduce((a, v) => a + (v || 0), 0);
+  return (item.s1Units || 0) + (item.s2Units || 0);
+}
+
+function renderRequestList() {
+  const reqs = getAllRequests();
+  const el = document.getElementById('requestList');
+  if (reqs.length === 0) {
+    el.innerHTML = '<div class="empty-state">No re-order requests yet. Click <strong>+ New Request</strong> to get started.</div>';
+    return;
+  }
+  el.innerHTML = reqs.map(r => {
+    const s = r.state || {};
+    const title = s.hdrSubtitle || s.hdrTitle || 'Untitled';
+    const date = s.hdrDate || r.createdAt?.slice(0,10) || '';
+    const itemCount = (s.items || []).length;
+    const totalUnits = (s.items || []).reduce((a,i) => a + getItemTotalUnits(i), 0);
+    const totalPieces = (s.items || []).reduce((a,i) => a + getItemTotalUnits(i) * (i.packQty||1), 0);
+    return `<div class="request-card" onclick="openRequest('${r.id}')">
+      <div class="rc-info">
+        <div class="rc-title"><span class="ref-badge">${esc(r.refId || '—')}</span>${esc(title)}</div>
+        <div class="rc-sub">${esc(s.hdrTitle || '')} &middot; ${esc(date)}${r.lastPushedAt ? ' <span class="rc-pushed">&#9679; Synced</span>' : ''}</div>
+      </div>
+      <div class="rc-stats">
+        <div class="stat"><div class="sv">${itemCount}</div>items</div>
+        <div class="stat"><div class="sv">${fmtN(totalUnits)}</div>units</div>
+        <div class="stat"><div class="sv">${fmtN(totalPieces)}</div>pieces</div>
+      </div>
+      <div class="rc-date">${esc(date)}</div>
+      <button class="rc-del" onclick="event.stopPropagation();deleteRequest('${r.id}')">Delete</button>
+    </div>`;
+  }).join('');
+}
+
+function createNewRequest() {
+  const id = Date.now().toString();
+  const refId = generateRefId();
+  const reqs = getAllRequests();
+  reqs.unshift({ id, refId, createdAt: new Date().toISOString(), state: null });
+  saveAllRequests(reqs);
+  openRequest(id);
+}
+
+function openRequest(id) {
+  currentRequestId = id;
+  const reqs = getAllRequests();
+  const req = reqs.find(r => r.id === id);
+  ensureRefId(req);
+  currentRefId = req.refId;
+  resetEditorDefaults();
+  if (req && req.state) {
+    applyState(req.state);
+  }
+  if (items.length === 0) addItemRow();
+  renderShipmentConfig();
+  renderItems();
+  refreshViews();
+  updateEditorBar();
+  switchTab('entry');
+  showScreen('editor');
+}
+
+function goBackToList() {
+  autoSaveCurrentRequest();
+  currentRequestId = null;
+  currentRefId = null;
+  items = [];
+  idCounter = 0;
+  shipments = [];
+  shipmentIdCounter = 0;
+  renderRequestList();
+  showScreen('list');
+}
+
+function saveCurrentRequest() {
+  autoSaveCurrentRequest();
+  updateEditorBar();
+}
+
+function autoSaveCurrentRequest() {
+  if (!currentRequestId) return;
+  const reqs = getAllRequests();
+  const idx = reqs.findIndex(r => r.id === currentRequestId);
+  if (idx === -1) return;
+  reqs[idx].state = gatherState();
+  saveAllRequests(reqs);
+}
+
+function deleteCurrentRequest() {
+  if (!confirm('Delete this re-order request? This cannot be undone.')) return;
+  const reqs = getAllRequests().filter(r => r.id !== currentRequestId);
+  saveAllRequests(reqs);
+  currentRequestId = null;
+  items = [];
+  idCounter = 0;
+  shipments = [];
+  shipmentIdCounter = 0;
+  renderRequestList();
+  showScreen('list');
+}
+
+function deleteRequest(id) {
+  if (!confirm('Delete this re-order request?')) return;
+  const reqs = getAllRequests().filter(r => r.id !== id);
+  saveAllRequests(reqs);
+  renderRequestList();
+}
+
+function updateEditorBar() {
+  const title = document.getElementById('hdrSubtitle').value || document.getElementById('hdrTitle').value || 'Untitled';
+  const date = document.getElementById('hdrDate').value || '';
+  document.getElementById('ebarTitle').textContent = title;
+  document.getElementById('ebarSub').textContent = `${document.getElementById('hdrTitle').value} \u00b7 ${date}`;
+  document.getElementById('ebarRefId').textContent = currentRefId || '';
+}
+
+// ── Tab Switching ──
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + tab).classList.add('active');
+  if (tab === 'ohad') renderOhadView();
+  if (tab === 'supplier') renderSupplierView();
+  if (tab === 'summary') renderSummary();
+}
+
+// ── Settings ──
+function openSettings() {
+  document.getElementById('airtablePAT').value = localStorage.getItem('airtable_pat') || '';
+  document.getElementById('settingsModal').classList.add('open');
+}
+function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
+function saveSettings() {
+  localStorage.setItem('airtable_pat', document.getElementById('airtablePAT').value.trim());
+  closeSettings();
+}
+
+// ── Airtable Lookup ──
+async function lookupASIN(asin, rowId) {
+  const pat = localStorage.getItem('airtable_pat');
+  if (!pat) { setLookupStatus(rowId, 'No API token — configure in Settings', 'err'); return; }
+  if (!asin || asin.length < 5) return;
+  setLookupStatus(rowId, 'Looking up...', 'loading');
+  try {
+    const formula = encodeURIComponent(`{ASIN}="${asin}"`);
+    const url = `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=${formula}&fields%5B%5D=${FIELD_IDS.asin}&fields%5B%5D=${FIELD_IDS.name}&fields%5B%5D=${FIELD_IDS.upc}&fields%5B%5D=${FIELD_IDS.packQty}&fields%5B%5D=${FIELD_IDS.masterSku}&fields%5B%5D=${FIELD_IDS.costRmb}&fields%5B%5D=${FIELD_IDS.yunDesc}`;
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${pat}` } });
+    if (!resp.ok) { setLookupStatus(rowId, `API error ${resp.status}`, 'err'); return; }
+    const data = await resp.json();
+    if (!data.records || data.records.length === 0) { setLookupStatus(rowId, 'Not found', 'err'); return; }
+    const f = data.records[0].fields;
+    const item = items.find(i => i.id === rowId);
+    if (!item) return;
+    item.name = f['Product Name'] || '';
+    item.upc = f['UPC'] || '';
+    item.fnsku = f['Master SKU'] || '';
+    item.packQty = Number(f['Pack Quantity']) || 1;
+    item.costPerPiece = Number(f['Per Piece Cost (RMB)']) || 0;
+    item.yunDesc = f['Yun Description'] || '';
+    renderItems();
+    refreshViews();
+    setLookupStatus(rowId, 'Found', 'ok');
+    autoSaveCurrentRequest();
+  } catch (e) {
+    setLookupStatus(rowId, 'Network error', 'err');
+  }
+}
+function setLookupStatus(rowId, msg, cls) {
+  const el = document.querySelector(`[data-status="${rowId}"]`);
+  if (el) { el.textContent = msg; el.className = 'lookup-status ' + cls; }
+}
+
+// ── Shipment Management ──
+function addShipment() {
+  const newId = ++shipmentIdCounter;
+  shipments.push({ id: newId, method: 'AIR', destination: 'FBA (USA)', label: '', description: '' });
+  renderShipmentConfig();
+  renderItems();
+  refreshViews();
+  autoSaveCurrentRequest();
+}
+
+function removeShipment(shipmentId) {
+  if (shipments.length <= 1) return;
+  if (!confirm('Remove this shipment? Units assigned to it will be lost.')) return;
+  shipments = shipments.filter(s => s.id !== shipmentId);
+  items.forEach(item => { delete item.units[shipmentId]; });
+  renderShipmentConfig();
+  renderItems();
+  refreshViews();
+  autoSaveCurrentRequest();
+}
+
+function renderShipmentConfig() {
+  const container = document.getElementById('shipmentConfigContainer');
+  let html = '';
+  shipments.forEach((s, idx) => {
+    const color = getShipmentColor(idx);
+    html += `<div class="shipment-box" style="border-left:4px solid ${color.bg}" data-shipment-id="${s.id}">
+      <h3>Shipment ${idx + 1}${shipments.length > 1 ? `<button class="shipment-remove" onclick="removeShipment(${s.id})" title="Remove shipment">&times;</button>` : ''}</h3>
+      <div class="row">
+        <div><label>Method</label><select data-sfield="method" data-sid="${s.id}"><option value="AIR"${s.method==='AIR'?' selected':''}>AIR</option><option value="SEA"${s.method==='SEA'?' selected':''}>SEA</option></select></div>
+        <div><label>Destination</label><input data-sfield="destination" data-sid="${s.id}" value="${esc(s.destination)}"></div>
+      </div>
+      <label>Custom Label (optional)</label>
+      <input data-sfield="label" data-sid="${s.id}" value="${esc(s.label)}" placeholder="e.g. SHIPMENT ${idx+1} — ${s.method} to ${s.destination}">
+      <label>Description</label>
+      <textarea data-sfield="description" data-sid="${s.id}">${esc(s.description)}</textarea>
+    </div>`;
+  });
+  html += `<div class="add-shipment-btn" onclick="addShipment()">+ Add Shipment</div>`;
+  container.innerHTML = html;
+
+  // Bind change events
+  container.querySelectorAll('[data-sfield]').forEach(el => {
+    el.addEventListener('change', () => {
+      const sid = parseInt(el.dataset.sid);
+      const field = el.dataset.sfield;
+      const s = shipments.find(sh => sh.id === sid);
+      if (s) s[field] = el.value;
+      autoSaveCurrentRequest();
+      refreshViews();
+    });
+  });
+}
+
+// ── Item Management ──
+function addItemRow() {
+  items.push({ id: ++idCounter, type: 'catalog', asin: '', name: '', upc: '', fnsku: '', yunDesc: '', packQty: 1, costPerPiece: 0, units: {} });
+  renderItems();
+}
+function removeItem(id) {
+  items = items.filter(i => i.id !== id);
+  renderItems();
+  refreshViews();
+  autoSaveCurrentRequest();
+}
+
+function refreshViews() {
+  renderOhadView();
+  renderSupplierView();
+  renderSummary();
+}
+
+function renderItems() {
+  // Render dynamic thead
+  const thead = document.getElementById('itemsHead');
+  let headHtml = '<tr><th class="type-col">Type</th><th class="asin-col">ASIN</th><th class="name-col">Product Name</th><th class="narrow">UPC</th><th class="med">FNSKU</th><th class="narrow">Pack Qty</th><th class="cost-col">Cost/pc RMB</th>';
+  shipments.forEach((s, idx) => {
+    const color = getShipmentColor(idx);
+    headHtml += `<th class="ship-col" style="background:${color.light};min-width:70px">S${idx+1} Units</th>`;
+  });
+  headHtml += '<th class="narrow">Pieces</th><th class="cost-col">Cost RMB</th><th class="cost-col">Est. Cost USD</th><th class="actions"></th></tr>';
+  thead.innerHTML = headHtml;
+
+  // Render tbody
+  const tbody = document.getElementById('itemsBody');
+  tbody.innerHTML = '';
+  items.forEach(item => {
+    const totalUnits = getItemTotalUnits(item);
+    const pieces = totalUnits * (item.packQty || 1);
+    const costRmb = pieces * (item.costPerPiece || 0);
+    const costUsd = costRmb * getActiveExchangeRate();
+    const tr = document.createElement('tr');
+    const isNew = item.type === 'new';
+
+    let rowHtml = `
+      <td class="type-col"><select data-field="type" data-id="${item.id}"><option value="catalog"${item.type!=='new'?' selected':''}>Catalog</option><option value="new"${item.type==='new'?' selected':''}>New Product</option></select></td>
+      <td class="asin-col">${isNew ? '<input value="" data-field="asin" data-id="'+item.id+'" disabled style="background:#eee;color:#999" placeholder="N/A">' : '<input value="'+esc(item.asin)+'" data-field="asin" data-id="'+item.id+'" placeholder="B0...">'}<span class="lookup-status" data-status="${item.id}"></span></td>
+      <td class="name-col"><input value="${esc(item.name)}" data-field="name" data-id="${item.id}" ${isNew ? '' : 'class="readonly" readonly'}></td>
+      <td class="narrow"><input value="${esc(item.upc)}" data-field="upc" data-id="${item.id}" ${isNew ? '' : 'class="readonly" readonly'}></td>
+      <td class="med"><input value="${esc(item.fnsku)}" data-field="fnsku" data-id="${item.id}" ${isNew ? '' : 'class="readonly" readonly'}></td>
+      <td class="narrow"><input type="number" value="${item.packQty}" data-field="packQty" data-id="${item.id}" min="1" ${isNew ? '' : 'class="readonly" readonly'}></td>
+      <td class="cost-col"><input type="number" step="0.01" value="${item.costPerPiece}" data-field="costPerPiece" data-id="${item.id}"></td>`;
+
+    shipments.forEach((s, idx) => {
+      const color = getShipmentColor(idx);
+      const unitVal = (item.units && item.units[s.id]) || 0;
+      rowHtml += `<td class="ship-col" style="background:${color.light}"><input type="number" value="${unitVal}" data-field="units" data-sid="${s.id}" data-id="${item.id}" min="0"></td>`;
+    });
+
+    rowHtml += `
+      <td class="narrow" style="text-align:right;font-weight:600">${fmtN(pieces)}</td>
+      <td class="cost-col" style="text-align:right">${fmtC(costRmb)}</td>
+      <td class="cost-col" style="text-align:right">${fmtC(costUsd)}</td>
+      <td class="actions"><button class="del-btn" onclick="removeItem(${item.id})">&times;</button></td>`;
+    tr.innerHTML = rowHtml;
+    tbody.appendChild(tr);
+  });
+
+  // Handle type dropdown changes
+  tbody.querySelectorAll('select[data-field="type"]').forEach(sel => {
+    const id = parseInt(sel.dataset.id);
+    sel.addEventListener('change', () => {
+      const item = items.find(i => i.id === id);
+      if (!item) return;
+      item.type = sel.value;
+      if (sel.value === 'new') {
+        item.asin = '';
+      }
+      renderItems();
+      refreshViews();
+      autoSaveCurrentRequest();
+    });
+  });
+
+  tbody.querySelectorAll('input').forEach(inp => {
+    const field = inp.dataset.field;
+    const id = parseInt(inp.dataset.id);
+    if (!field) return;
+    inp.addEventListener('change', () => {
+      const item = items.find(i => i.id === id);
+      if (!item) return;
+      if (field === 'units') {
+        const sid = parseInt(inp.dataset.sid);
+        if (!item.units) item.units = {};
+        item.units[sid] = parseFloat(inp.value) || 0;
+      } else if (['packQty', 'costPerPiece'].includes(field)) {
+        item[field] = parseFloat(inp.value) || 0;
+      } else {
+        item[field] = inp.value;
+      }
+      if (field === 'asin' && item.type !== 'new') lookupASIN(inp.value.trim(), id);
+      renderItems();
+      refreshViews();
+      autoSaveCurrentRequest();
+    });
+    if (field === 'asin') {
+      let debounce;
+      inp.addEventListener('input', () => {
+        clearTimeout(debounce);
+        const val = inp.value.trim();
+        const item = items.find(i => i.id === id);
+        if (item) item.asin = val;
+        if (item && item.type !== 'new') {
+          debounce = setTimeout(() => { if (val.length >= 5) lookupASIN(val, id); }, 600);
+        }
+      });
+    }
+  });
+}
+
+// ── Helpers ──
+function esc(s) { return String(s||'').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+function fmtN(n) { return Number(n).toLocaleString('en-US'); }
+function fmtC(n) { return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+// ── Shipment Labels ──
+function getShipmentLabel(s) {
+  if (s.label && s.label.trim()) return s.label;
+  const idx = shipments.indexOf(s);
+  return `SHIPMENT ${idx + 1} \u2014 ${s.method} to ${s.destination}`;
+}
+
+// ── Computed Data ──
+function shipmentItems(shipmentId) {
+  return items.filter(i => ((i.units && i.units[shipmentId]) || 0) > 0).map(i => {
+    const units = i.units[shipmentId] || 0;
+    const pieces = units * (i.packQty || 1);
+    const costRmb = pieces * (i.costPerPiece || 0);
+    return { ...i, units: units, pieces, costRmb, costUsd: costRmb * getActiveExchangeRate() };
+  });
+}
+
+function totalItems() {
+  const map = {};
+  items.forEach(i => {
+    const units = getItemTotalUnits(i);
+    if (units <= 0) return;
+    const key = i.asin || ('_' + i.id);
+    if (map[key]) {
+      map[key].units += units;
+    } else {
+      map[key] = { ...i, units };
+    }
+  });
+  return Object.values(map).map(i => {
+    const pieces = i.units * (i.packQty || 1);
+    const costRmb = pieces * (i.costPerPiece || 0);
+    return { ...i, pieces, costRmb, costUsd: costRmb * getActiveExchangeRate() };
+  });
+}
+
+// ── Sir Ohad View ──
+function renderOhadView() {
+  const title = document.getElementById('hdrTitle').value;
+  const subtitle = document.getElementById('hdrSubtitle').value;
+  const date = document.getElementById('hdrDate').value;
+  const notes = document.getElementById('summaryNotes').value;
+  const tot = totalItems();
+
+  let html = `<div class="view-header"><h1>${esc(title)}</h1><h2>${esc(subtitle)}</h2><div class="date-line">Date: ${date}</div></div>`;
+
+  function ohadTable(items, isTotal) {
+    let h = `<table class="view-table"><thead><tr><th>ASIN</th><th>Product</th><th class="num">Units</th><th class="num">Pieces</th><th class="num">Cost in RMB</th><th class="num">Est. Cost in USD</th></tr></thead><tbody>`;
+    let tUnits=0, tPieces=0, tRmb=0, tUsd=0;
+    items.forEach(i => { tUnits+=i.units; tPieces+=i.pieces; tRmb+=i.costRmb; tUsd+=i.costUsd;
+      h += `<tr><td>${esc(i.asin)}</td><td>${esc(i.name)}</td><td class="num">${fmtN(i.units)}</td><td class="num">${fmtN(i.pieces)}</td><td class="num">${fmtC(i.costRmb)}</td><td class="num">${fmtC(i.costUsd)}</td></tr>`;
+    });
+    const rowCls = isTotal ? 'grandtotal' : 'subtotal';
+    h += `<tr class="${rowCls}"><td colspan="2"><strong>${isTotal?'Grand Total':'Subtotal'}</strong></td><td class="num">${fmtN(tUnits)}</td><td class="num">${fmtN(tPieces)}</td><td class="num">${fmtC(tRmb)}</td><td class="num">${fmtC(tUsd)}</td></tr>`;
+    h += '</tbody></table>';
+    return h;
+  }
+
+  // Total Order Summary first
+  html += `<div class="shipment-section total-section"><h3 class="total">TOTAL ORDER SUMMARY</h3>${ohadTable(tot, true)}</div>`;
+
+  // Shipment Plans breakdown
+  html += `<div class="shipment-section"><h3 style="background:#f0f2f5;color:#333;font-size:16px;letter-spacing:.5px">SHIPMENT PLANS</h3></div>`;
+  shipments.forEach((s, idx) => {
+    const si = shipmentItems(s.id);
+    if (si.length) {
+      const color = getShipmentColor(idx);
+      html += `<div class="shipment-section"><h3 style="background:${color.viewBg};color:${color.viewColor}">${esc(getShipmentLabel(s))}</h3><div class="desc">${esc(s.description)}</div>${ohadTable(si, false)}</div>`;
+    }
+  });
+
+  if (notes) html += `<div class="notes-block">${esc(notes)}</div>`;
+  document.getElementById('ohadContent').innerHTML = html;
+}
+
+// ── Supplier View ──
+function renderSupplierView() {
+  const title = document.getElementById('hdrTitle').value;
+  const subtitle = document.getElementById('hdrSubtitle').value;
+  const date = document.getElementById('hdrDate').value;
+  const notes = document.getElementById('summaryNotes').value;
+  const tot = totalItems();
+
+  let html = `<div class="view-header"><h1>${esc(title)}</h1><h2>${esc(subtitle)}</h2><div class="date-line">Date: ${date}</div></div>`;
+
+  function suppTable(items, isTotal) {
+    let h = `<table class="view-table"><thead><tr><th>FN SKU</th><th>UPC</th><th>SKU</th><th>Product Description</th><th class="num">Units</th><th class="num">Pieces</th></tr></thead><tbody>`;
+    let tUnits=0, tPieces=0;
+    items.forEach(i => { tUnits+=i.units; tPieces+=i.pieces;
+      h += `<tr><td>${esc(i.asin)}</td><td>${esc(i.upc)}</td><td>${esc(i.fnsku)}</td><td>${esc(i.yunDesc || i.name)}</td><td class="num">${fmtN(i.units)}</td><td class="num">${fmtN(i.pieces)}</td></tr>`;
+    });
+    const rowCls = isTotal ? 'grandtotal' : 'subtotal';
+    h += `<tr class="${rowCls}"><td colspan="4"><strong>${isTotal?'Grand Total':'Subtotal'}</strong></td><td class="num">${fmtN(tUnits)}</td><td class="num">${fmtN(tPieces)}</td></tr>`;
+    h += '</tbody></table>';
+    return h;
+  }
+
+  // Total Order Summary first
+  html += `<div class="shipment-section total-section"><h3 class="total">TOTAL ORDER SUMMARY</h3>${suppTable(tot, true)}</div>`;
+
+  // Shipment Plans breakdown
+  html += `<div class="shipment-section"><h3 style="background:#f0f2f5;color:#333;font-size:16px;letter-spacing:.5px">SHIPMENT PLANS</h3></div>`;
+  shipments.forEach((s, idx) => {
+    const si = shipmentItems(s.id);
+    if (si.length) {
+      const color = getShipmentColor(idx);
+      html += `<div class="shipment-section"><h3 style="background:${color.viewBg};color:${color.viewColor}">${esc(getShipmentLabel(s))}</h3><div class="desc">${esc(s.description)}</div>${suppTable(si, false)}</div>`;
+    }
+  });
+
+  if (notes) html += `<div class="notes-block">${esc(notes)}</div>`;
+  document.getElementById('supplierContent').innerHTML = html;
+}
+
+// ── Summary ──
+function renderSummary() {
+  const tot = totalItems();
+  const sum = (arr, k) => arr.reduce((a, i) => a + (i[k]||0), 0);
+
+  const tUnits = sum(tot,'units'), tPieces = sum(tot,'pieces'), tRmb = sum(tot,'costRmb'), tUsd = sum(tot,'costUsd');
+  let html = `<div class="summary-grid">
+    <div class="summary-card"><h4>Total Items</h4><div class="val">${tot.length}</div><sub class="sub">unique ASINs across all shipments</sub></div>
+    <div class="summary-card"><h4>Total Units</h4><div class="val">${fmtN(tUnits)}</div><sub class="sub">${fmtN(tPieces)} pieces</sub></div>
+    <div class="summary-card"><h4>Total Cost (RMB)</h4><div class="val">${fmtC(tRmb)}</div></div>
+    <div class="summary-card"><h4>Total Cost (USD)</h4><div class="val">$${fmtC(tUsd)}</div></div>
+  </div>`;
+
+  html += `<div class="summary-breakdown"><table>
+    <thead><tr><th>Shipment</th><th class="num">Items</th><th class="num">Units</th><th class="num">Pieces</th><th class="num">Cost RMB</th><th class="num">Est. Cost USD</th></tr></thead><tbody>`;
+
+  shipments.forEach(s => {
+    const si = shipmentItems(s.id);
+    html += `<tr><td>${esc(getShipmentLabel(s))}</td><td class="num">${si.length}</td><td class="num">${fmtN(sum(si,'units'))}</td><td class="num">${fmtN(sum(si,'pieces'))}</td><td class="num">${fmtC(sum(si,'costRmb'))}</td><td class="num">${fmtC(sum(si,'costUsd'))}</td></tr>`;
+  });
+
+  html += `<tr style="font-weight:700;border-top:2px solid #bbb"><td>Total</td><td class="num">${tot.length}</td><td class="num">${fmtN(tUnits)}</td><td class="num">${fmtN(tPieces)}</td><td class="num">${fmtC(tRmb)}</td><td class="num">${fmtC(tUsd)}</td></tr>
+  </tbody></table></div>`;
+  document.getElementById('summaryContent').innerHTML = html;
+}
+
+// ── Excel Styling Helpers ──
+const FONT = 'Lexend';
+const XL = {
+  // Colors
+  TOT_BG: '2E86C1', TOT_FG: 'FFFFFF', TOT_LIGHT: 'EBF5FB',
+  HDR_BG: 'F0F2F5', GRAY: '888888', WHITE: 'FFFFFF', BLACK: '222222',
+  SUBTOT_BG: 'F5F5F5', GRAND_BG: 'D6EAF8',
+
+  font(sz, bold, color) { return { name: FONT, sz: sz||10, bold: !!bold, color: { rgb: color||this.BLACK } }; },
+  fill(rgb) { return { fgColor: { rgb }, patternType: 'solid' }; },
+  border() {
+    const s = { style: 'thin', color: { rgb: 'DDDDDD' } };
+    return { top: s, bottom: s, left: s, right: s };
+  },
+  numFmt: '#,##0',
+  costFmt: '#,##0.00',
+  cell(v, s) { return { v, s }; },
+};
+
+function styledCell(val, opts={}) {
+  const c = { v: val, t: typeof val === 'number' ? 'n' : 's' };
+  c.s = {};
+  c.s.font = XL.font(opts.sz||10, opts.bold, opts.fontColor);
+  if (opts.fill) c.s.fill = XL.fill(opts.fill);
+  if (opts.border !== false) c.s.border = XL.border();
+  if (opts.numFmt) c.s.numFmt = opts.numFmt;
+  if (opts.alignment) c.s.alignment = opts.alignment;
+  return c;
+}
+
+function emptyStyledRow(cols) {
+  return Array(cols).fill(styledCell('', { border: false }));
+}
+
+// ── Excel Export ──
+function downloadExcel(mode) {
+  const wb = XLSX.utils.book_new();
+  if (mode === 'ohad' || mode === 'both') { XLSX.utils.book_append_sheet(wb, buildOhadSheet(), 'Sir Ohad View'); }
+  if (mode === 'supplier' || mode === 'both') { XLSX.utils.book_append_sheet(wb, buildSupplierSheet(), 'Supplier View'); }
+  const subtitle = document.getElementById('hdrSubtitle').value.replace(/[^a-zA-Z0-9 ]/g,'').trim().replace(/\s+/g,'_');
+  XLSX.writeFile(wb, `ReOrder_${subtitle}_${document.getElementById('hdrDate').value}.xlsx`);
+}
+
+function buildOhadSheet() {
+  const title = document.getElementById('hdrTitle').value;
+  const subtitle = document.getElementById('hdrSubtitle').value;
+  const date = document.getElementById('hdrDate').value;
+  const notes = document.getElementById('summaryNotes').value;
+  const tot = totalItems();
+  const COLS = 6;
+  const data = [];
+
+  // Title block
+  data.push([styledCell(title, { sz: 16, bold: true, border: false }), ...Array(COLS-1).fill(styledCell('',{border:false}))]);
+  data.push([styledCell(subtitle, { sz: 12, bold: true, fontColor: XL.GRAY, border: false }), ...Array(COLS-1).fill(styledCell('',{border:false}))]);
+  data.push([styledCell(`Date: ${date}`, { sz: 10, fontColor: XL.GRAY, border: false }), ...Array(COLS-1).fill(styledCell('',{border:false}))]);
+  data.push(emptyStyledRow(COLS));
+
+  function addSection(label, desc, items, colors, isTotal) {
+    const bg = isTotal ? '7D3C98' : colors.xlBg;
+    const fg = XL.WHITE;
+    const lightBg = isTotal ? 'E8DAF0' : colors.xlLight;
+    const rowBg = isTotal ? 'F5F0FF' : null;
+
+    data.push([
+      styledCell(label, { sz: 12, bold: true, fontColor: fg, fill: bg }),
+      ...Array(COLS-1).fill(styledCell('', { fill: bg }))
+    ]);
+    if (desc) {
+      data.push([
+        styledCell(desc, { sz: 9, fontColor: XL.GRAY, border: false, alignment: { wrapText: true }, fill: rowBg || undefined }),
+        ...Array(COLS-1).fill(styledCell('', { border: false, fill: rowBg || undefined }))
+      ]);
+    }
+
+    const headers = ['ASIN','Product','Units','Pieces','Cost in RMB','Est. Cost in USD'];
+    data.push(headers.map(h => styledCell(h, { sz: 10, bold: true, fill: lightBg, fontColor: isTotal ? '4A235A' : XL.BLACK })));
+
+    let tU=0,tP=0,tR=0,tD=0;
+    items.forEach(i => {
+      tU+=i.units; tP+=i.pieces; tR+=i.costRmb; tD+=i.costUsd;
+      const rf = rowBg ? { fill: rowBg } : {};
+      data.push([
+        styledCell(i.asin, rf),
+        styledCell(i.name, rf),
+        styledCell(i.units, { numFmt: XL.numFmt, ...rf }),
+        styledCell(i.pieces, { numFmt: XL.numFmt, ...rf }),
+        styledCell(round2(i.costRmb), { numFmt: XL.costFmt, ...rf }),
+        styledCell(round2(i.costUsd), { numFmt: XL.costFmt, ...rf }),
+      ]);
+    });
+
+    const totLabel = isTotal ? 'Grand Total' : 'Subtotal';
+    const totBg = isTotal ? 'E0CFF0' : XL.SUBTOT_BG;
+    const totFont = isTotal ? '4A235A' : undefined;
+    data.push([
+      styledCell(totLabel, { bold: true, fill: totBg, fontColor: totFont }),
+      styledCell('', { fill: totBg }),
+      styledCell(tU, { bold: true, fill: totBg, numFmt: XL.numFmt, fontColor: totFont }),
+      styledCell(tP, { bold: true, fill: totBg, numFmt: XL.numFmt, fontColor: totFont }),
+      styledCell(round2(tR), { bold: true, fill: totBg, numFmt: XL.costFmt, fontColor: totFont }),
+      styledCell(round2(tD), { bold: true, fill: totBg, numFmt: XL.costFmt, fontColor: totFont }),
+    ]);
+    data.push(emptyStyledRow(COLS));
+  }
+
+  // Total Order Summary first
+  addSection('TOTAL ORDER SUMMARY', '', tot, {}, true);
+
+  // Shipment Plans header
+  data.push([
+    styledCell('SHIPMENT PLANS', { sz: 13, bold: true, fontColor: XL.BLACK, fill: XL.HDR_BG }),
+    ...Array(COLS-1).fill(styledCell('', { fill: XL.HDR_BG }))
+  ]);
+  data.push(emptyStyledRow(COLS));
+
+  shipments.forEach((s, idx) => {
+    const si = shipmentItems(s.id);
+    if (si.length) addSection(getShipmentLabel(s), s.description, si, getShipmentColor(idx), false);
+  });
+
+  if (notes) {
+    data.push([styledCell(notes, { sz: 9, fontColor: XL.GRAY, border: false, alignment: { wrapText: true } }), ...Array(COLS-1).fill(styledCell('',{border:false}))]);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:18},{wch:32},{wch:10},{wch:10},{wch:15},{wch:15}];
+  return ws;
+}
+
+function buildSupplierSheet() {
+  const title = document.getElementById('hdrTitle').value;
+  const subtitle = document.getElementById('hdrSubtitle').value;
+  const date = document.getElementById('hdrDate').value;
+  const notes = document.getElementById('summaryNotes').value;
+  const tot = totalItems();
+  const COLS = 6;
+  const data = [];
+
+  data.push([styledCell(title, { sz: 16, bold: true, border: false }), ...Array(COLS-1).fill(styledCell('',{border:false}))]);
+  data.push([styledCell(subtitle, { sz: 12, bold: true, fontColor: XL.GRAY, border: false }), ...Array(COLS-1).fill(styledCell('',{border:false}))]);
+  data.push([styledCell(`Date: ${date}`, { sz: 10, fontColor: XL.GRAY, border: false }), ...Array(COLS-1).fill(styledCell('',{border:false}))]);
+  data.push(emptyStyledRow(COLS));
+
+  function addSection(label, desc, items, colors, isTotal) {
+    const bg = isTotal ? '7D3C98' : colors.xlBg;
+    const fg = XL.WHITE;
+    const lightBg = isTotal ? 'E8DAF0' : colors.xlLight;
+    const rowBg = isTotal ? 'F5F0FF' : null;
+
+    data.push([
+      styledCell(label, { sz: 12, bold: true, fontColor: fg, fill: bg }),
+      ...Array(COLS-1).fill(styledCell('', { fill: bg }))
+    ]);
+    if (desc) {
+      data.push([
+        styledCell(desc, { sz: 9, fontColor: XL.GRAY, border: false, alignment: { wrapText: true }, fill: rowBg || undefined }),
+        ...Array(COLS-1).fill(styledCell('', { border: false, fill: rowBg || undefined }))
+      ]);
+    }
+
+    const headers = ['FN SKU','UPC','SKU','Product Description','Units','Pieces'];
+    data.push(headers.map(h => styledCell(h, { sz: 10, bold: true, fill: lightBg, fontColor: isTotal ? '4A235A' : XL.BLACK })));
+
+    let tU=0,tP=0;
+    items.forEach(i => {
+      tU+=i.units; tP+=i.pieces;
+      const rf = rowBg ? { fill: rowBg } : {};
+      data.push([
+        styledCell(i.asin, rf),
+        styledCell(i.upc, rf),
+        styledCell(i.fnsku, rf),
+        styledCell(i.yunDesc||i.name, rf),
+        styledCell(i.units, { numFmt: XL.numFmt, ...rf }),
+        styledCell(i.pieces, { numFmt: XL.numFmt, ...rf }),
+      ]);
+    });
+
+    const totLabel = isTotal ? 'Grand Total' : 'Subtotal';
+    const totBg = isTotal ? 'E0CFF0' : XL.SUBTOT_BG;
+    const totFont = isTotal ? '4A235A' : undefined;
+    data.push([
+      styledCell(totLabel, { bold: true, fill: totBg, fontColor: totFont }),
+      styledCell('', { fill: totBg }),
+      styledCell('', { fill: totBg }),
+      styledCell('', { fill: totBg }),
+      styledCell(tU, { bold: true, fill: totBg, numFmt: XL.numFmt, fontColor: totFont }),
+      styledCell(tP, { bold: true, fill: totBg, numFmt: XL.numFmt, fontColor: totFont }),
+    ]);
+    data.push(emptyStyledRow(COLS));
+  }
+
+  // Total Order Summary first
+  addSection('TOTAL ORDER SUMMARY', '', tot, {}, true);
+
+  // Shipment Plans header
+  data.push([
+    styledCell('SHIPMENT PLANS', { sz: 13, bold: true, fontColor: XL.BLACK, fill: XL.HDR_BG }),
+    ...Array(COLS-1).fill(styledCell('', { fill: XL.HDR_BG }))
+  ]);
+  data.push(emptyStyledRow(COLS));
+
+  shipments.forEach((s, idx) => {
+    const si = shipmentItems(s.id);
+    if (si.length) addSection(getShipmentLabel(s), s.description, si, getShipmentColor(idx), false);
+  });
+
+  if (notes) {
+    data.push([styledCell(notes, { sz: 9, fontColor: XL.GRAY, border: false, alignment: { wrapText: true } }), ...Array(COLS-1).fill(styledCell('',{border:false}))]);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:18},{wch:16},{wch:22},{wch:32},{wch:10},{wch:10}];
+  return ws;
+}
+
+function round2(n) { return Math.round(n * 100) / 100; }
+
+// ── State Gather / Apply ──
+function gatherState() {
+  // Read latest shipment field values from DOM
+  shipments.forEach(s => {
+    const box = document.querySelector(`[data-shipment-id="${s.id}"]`);
+    if (box) {
+      const method = box.querySelector(`[data-sfield="method"]`);
+      const dest = box.querySelector(`[data-sfield="destination"]`);
+      const label = box.querySelector(`[data-sfield="label"]`);
+      const desc = box.querySelector(`[data-sfield="description"]`);
+      if (method) s.method = method.value;
+      if (dest) s.destination = dest.value;
+      if (label) s.label = label.value;
+      if (desc) s.description = desc.value;
+    }
+  });
+  return {
+    hdrTitle: document.getElementById('hdrTitle').value,
+    hdrSubtitle: document.getElementById('hdrSubtitle').value,
+    hdrDate: document.getElementById('hdrDate').value,
+    exchangeRate: parseFloat(document.getElementById('hdrExRate').value) || null,
+    shipments: shipments,
+    shipmentIdCounter: shipmentIdCounter,
+    summaryNotes: document.getElementById('summaryNotes').value,
+    items: items,
+    idCounter: idCounter
+  };
+}
+
+function applyState(s) {
+  if(!s) return;
+  s = migrateStateToNShipments(s);
+  if(s.hdrTitle!==undefined) document.getElementById('hdrTitle').value=s.hdrTitle;
+  if(s.hdrSubtitle!==undefined) document.getElementById('hdrSubtitle').value=s.hdrSubtitle;
+  if(s.hdrDate) document.getElementById('hdrDate').value=s.hdrDate;
+  if(s.exchangeRate) {
+    document.getElementById('hdrExRate').value = s.exchangeRate;
+    document.getElementById('hdrExRate').dataset.autoSet = 'false';
+    updateExRateStatus('Saved rate');
+  }
+  if(s.summaryNotes!==undefined) document.getElementById('summaryNotes').value=s.summaryNotes;
+  if(s.shipments) { shipments = s.shipments; }
+  if(s.shipmentIdCounter) { shipmentIdCounter = s.shipmentIdCounter; }
+  if(s.items) { items=s.items; items.forEach(i => { if(!i.type) i.type='catalog'; if(!i.units) i.units={}; }); }
+  if(s.idCounter) idCounter=s.idCounter;
+}
+
+function resetEditorDefaults() {
+  items = []; idCounter = 0;
+  shipments = [
+    { id: 1, method: 'AIR', destination: 'FBA (USA)', label: '', description: 'Priority replenishment \u2014 top seller currently out of stock with no inbound' },
+    { id: 2, method: 'SEA', destination: 'AWD (USA)', label: '', description: 'Bulk replenishment for all ASINs' }
+  ];
+  shipmentIdCounter = 2;
+  document.getElementById('hdrTitle').value = 'REORDER & SHIPMENT PLAN';
+  document.getElementById('hdrSubtitle').value = '';
+  document.getElementById('hdrDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('hdrExRate').value = liveExchangeRate.toFixed(4);
+  document.getElementById('hdrExRate').dataset.autoSet = 'true';
+  updateExRateStatus('Live rate');
+  document.getElementById('summaryNotes').value = '';
+}
+
+// ── Reference ID ──
+function generateRefId() {
+  const existing = getAllRequests().map(r => r.refId).filter(Boolean);
+  let maxNum = 0;
+  for (const ref of existing) {
+    const m = ref.match(/^SCM(\d+)$/);
+    if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
+  }
+  const next = maxNum + 1;
+  return 'SCM' + String(next).padStart(7, '0');
+}
+
+function ensureRefId(req) {
+  if (!req.refId) {
+    req.refId = generateRefId();
+    const reqs = getAllRequests();
+    const idx = reqs.findIndex(r => r.id === req.id);
+    if (idx !== -1) { reqs[idx].refId = req.refId; saveAllRequests(reqs); }
+  }
+  return req.refId;
+}
+
+// ── Airtable Table Management ──
+const AIRTABLE_TABLES_KEY = 'airtable_reorder_tables';
+
+function getStoredTableIds() {
+  try { return JSON.parse(localStorage.getItem(AIRTABLE_TABLES_KEY)) || null; } catch(e) { return null; }
+}
+
+function saveTableIds(ids) {
+  localStorage.setItem(AIRTABLE_TABLES_KEY, JSON.stringify(ids));
+}
+
+async function ensureAirtableTables(pat) {
+  const stored = getStoredTableIds();
+  if (stored && stored.requestsTableId && stored.lineItemsTableId && stored.fieldsUpgraded) return stored;
+
+  try {
+    const resp = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`, {
+      headers: { Authorization: `Bearer ${pat}` }
+    });
+    if (!resp.ok) throw new Error(`Schema read failed: ${resp.status}`);
+    const schema = await resp.json();
+
+    let requestsTable = schema.tables.find(t => t.name === 'Reorder Requests');
+    let lineItemsTable = schema.tables.find(t => t.name === 'Reorder Line Items');
+
+    if (!requestsTable) {
+      requestsTable = await createRequestsTable(pat);
+      if (!requestsTable) return null;
+    }
+    if (!lineItemsTable) {
+      lineItemsTable = await createLineItemsTable(pat, requestsTable.id);
+      if (!lineItemsTable) return null;
+    }
+
+    // Ensure new fields exist on existing tables (upgrade from v1 schema)
+    await ensureFieldExists(pat, requestsTable, 'Shipments Config', { type: 'multilineText' });
+    await ensureFieldExists(pat, lineItemsTable, 'Units By Shipment', { type: 'multilineText' });
+
+    const ids = { requestsTableId: requestsTable.id, lineItemsTableId: lineItemsTable.id, fieldsUpgraded: true };
+    saveTableIds(ids);
+    return ids;
+  } catch(e) {
+    alert('Failed to set up Airtable tables: ' + e.message);
+    return null;
+  }
+}
+
+async function ensureFieldExists(pat, table, fieldName, fieldDef) {
+  // table can be a full table object (from schema) or just have .id
+  const fields = table.fields || [];
+  if (fields.find(f => f.name === fieldName)) return; // already exists
+  try {
+    const tableId = table.id;
+    await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${tableId}/fields`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: fieldName, ...fieldDef })
+    });
+  } catch(e) {
+    console.warn(`Could not add field "${fieldName}":`, e.message);
+  }
+}
+
+async function createRequestsTable(pat) {
+  const body = {
+    name: 'Reorder Requests',
+    fields: [
+      { name: 'Reference ID', type: 'singleLineText' },
+      { name: 'Title', type: 'singleLineText' },
+      { name: 'Subtitle', type: 'singleLineText' },
+      { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
+      { name: 'Shipments Config', type: 'multilineText' },
+      { name: 'S1 Method', type: 'singleLineText' },
+      { name: 'S1 Destination', type: 'singleLineText' },
+      { name: 'S1 Description', type: 'multilineText' },
+      { name: 'S2 Method', type: 'singleLineText' },
+      { name: 'S2 Destination', type: 'singleLineText' },
+      { name: 'S2 Description', type: 'multilineText' },
+      { name: 'Total Items', type: 'number', options: { precision: 0 } },
+      { name: 'Total Units', type: 'number', options: { precision: 0 } },
+      { name: 'Total Pieces', type: 'number', options: { precision: 0 } },
+      { name: 'Total Cost RMB', type: 'number', options: { precision: 2 } },
+      { name: 'Total Cost USD', type: 'number', options: { precision: 2 } },
+      { name: 'Exchange Rate', type: 'number', options: { precision: 6 } },
+      { name: 'Status', type: 'singleSelect', options: { choices: [
+        { name: 'Draft', color: 'yellowLight2' },
+        { name: 'Sent to Supplier', color: 'blueLight2' },
+        { name: 'Confirmed', color: 'greenLight2' }
+      ]}},
+      { name: 'Notes', type: 'multilineText' }
+    ]
+  };
+  const resp = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) { const err = await resp.text(); throw new Error(`Create requests table failed: ${err}`); }
+  return await resp.json();
+}
+
+async function createLineItemsTable(pat, requestsTableId) {
+  const body = {
+    name: 'Reorder Line Items',
+    fields: [
+      { name: 'Reference ID', type: 'singleLineText' },
+      { name: 'Request', type: 'multipleRecordLinks', options: { linkedTableId: requestsTableId } },
+      { name: 'ASIN', type: 'singleLineText' },
+      { name: 'Product Name', type: 'singleLineText' },
+      { name: 'UPC', type: 'singleLineText' },
+      { name: 'FNSKU', type: 'singleLineText' },
+      { name: 'Yun Description', type: 'singleLineText' },
+      { name: 'Type', type: 'singleSelect', options: { choices: [
+        { name: 'Catalog', color: 'blueLight2' },
+        { name: 'New Product', color: 'purpleLight2' }
+      ]}},
+      { name: 'Pack Qty', type: 'number', options: { precision: 0 } },
+      { name: 'Cost Per Piece RMB', type: 'number', options: { precision: 2 } },
+      { name: 'Units By Shipment', type: 'multilineText' },
+      { name: 'S1 Units', type: 'number', options: { precision: 0 } },
+      { name: 'S2 Units', type: 'number', options: { precision: 0 } },
+      { name: 'Total Units', type: 'number', options: { precision: 0 } },
+      { name: 'Total Pieces', type: 'number', options: { precision: 0 } },
+      { name: 'Cost RMB', type: 'number', options: { precision: 2 } },
+      { name: 'Cost USD', type: 'number', options: { precision: 2 } }
+    ]
+  };
+  const resp = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) { const err = await resp.text(); throw new Error(`Create line items table failed: ${err}`); }
+  return await resp.json();
+}
+
+// ── Push to Airtable ──
+async function pushToAirtable() {
+  const pat = localStorage.getItem('airtable_pat');
+  if (!pat) { alert('Configure your Airtable token in Settings first.'); return; }
+
+  autoSaveCurrentRequest();
+
+  const pushBtn = document.querySelector('.push-btn');
+  const pushStatus = document.getElementById('pushStatus');
+  pushBtn.disabled = true;
+  pushBtn.textContent = 'Pushing...';
+  pushStatus.textContent = '';
+
+  try {
+    const tables = await ensureAirtableTables(pat);
+    if (!tables) { pushBtn.disabled = false; pushBtn.textContent = '\u2191 Push to Airtable'; return; }
+
+    const reqs = getAllRequests();
+    const req = reqs.find(r => r.id === currentRequestId);
+    if (!req) throw new Error('Request not found');
+
+    const tot = totalItems();
+    const sum = (arr, k) => arr.reduce((a, i) => a + (i[k]||0), 0);
+
+    // Build request fields
+    const requestFields = {
+      'Reference ID': req.refId,
+      'Title': document.getElementById('hdrTitle').value,
+      'Subtitle': document.getElementById('hdrSubtitle').value,
+      'Date': document.getElementById('hdrDate').value || null,
+      'Shipments Config': JSON.stringify(shipments),
+      'S1 Method': shipments[0] ? shipments[0].method : '',
+      'S1 Destination': shipments[0] ? shipments[0].destination : '',
+      'S1 Description': shipments[0] ? shipments[0].description : '',
+      'S2 Method': shipments[1] ? shipments[1].method : '',
+      'S2 Destination': shipments[1] ? shipments[1].destination : '',
+      'S2 Description': shipments[1] ? shipments[1].description : '',
+      'Total Items': tot.length,
+      'Total Units': sum(tot, 'units'),
+      'Total Pieces': sum(tot, 'pieces'),
+      'Total Cost RMB': round2(sum(tot, 'costRmb')),
+      'Total Cost USD': round2(sum(tot, 'costUsd')),
+      'Exchange Rate': getActiveExchangeRate(),
+      'Notes': document.getElementById('summaryNotes').value
+    };
+
+    // Create or update request record
+    let requestRecordId = req.airtableRequestRecordId;
+    if (requestRecordId) {
+      const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${tables.requestsTableId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: [{ id: requestRecordId, fields: requestFields }] })
+      });
+      if (!resp.ok) { const err = await resp.text(); throw new Error(`Update request failed: ${resp.status} — ${err}`); }
+    } else {
+      requestFields['Status'] = 'Draft';
+      const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${tables.requestsTableId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: [{ fields: requestFields }] })
+      });
+      if (!resp.ok) { const err = await resp.text(); throw new Error(`Create request failed: ${resp.status} — ${err}`); }
+      const data = await resp.json();
+      requestRecordId = data.records[0].id;
+    }
+    req.airtableRequestRecordId = requestRecordId;
+
+    // Delete orphaned line items
+    const previousItemRecordIds = req.airtableLineItemRecordIds || {};
+    const currentItemIds = new Set(items.map(i => String(i.id)));
+    const orphanedRecordIds = Object.entries(previousItemRecordIds)
+      .filter(([itemId]) => !currentItemIds.has(itemId))
+      .map(([, recId]) => recId);
+
+    for (let i = 0; i < orphanedRecordIds.length; i += 10) {
+      const batch = orphanedRecordIds.slice(i, i + 10);
+      const params = batch.map(id => `records[]=${id}`).join('&');
+      await fetch(`https://api.airtable.com/v0/${BASE_ID}/${tables.lineItemsTableId}?${params}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${pat}` }
+      });
+    }
+
+    // Prepare line item creates and updates
+    const toCreate = [];
+    const toUpdate = [];
+
+    items.forEach(item => {
+      const totalUnits = getItemTotalUnits(item);
+      const pieces = totalUnits * (item.packQty || 1);
+      const costRmb = pieces * (item.costPerPiece || 0);
+      const costUsd = costRmb * getActiveExchangeRate();
+
+      const fields = {
+        'Request': [requestRecordId],
+        'Reference ID': req.refId,
+        'ASIN': item.asin || '',
+        'Product Name': item.name || '',
+        'UPC': item.upc || '',
+        'FNSKU': item.fnsku || '',
+        'Yun Description': item.yunDesc || '',
+        'Type': item.type === 'new' ? 'New Product' : 'Catalog',
+        'Pack Qty': item.packQty || 1,
+        'Cost Per Piece RMB': item.costPerPiece || 0,
+        'Units By Shipment': JSON.stringify(item.units || {}),
+        'S1 Units': shipments[0] ? (item.units[shipments[0].id] || 0) : 0,
+        'S2 Units': shipments[1] ? (item.units[shipments[1].id] || 0) : 0,
+        'Total Units': totalUnits,
+        'Total Pieces': pieces,
+        'Cost RMB': round2(costRmb),
+        'Cost USD': round2(costUsd)
+      };
+
+      const existingRecId = item.airtableRecordId || previousItemRecordIds[String(item.id)];
+      if (existingRecId) {
+        toUpdate.push({ id: existingRecId, fields });
+        item.airtableRecordId = existingRecId;
+      } else {
+        toCreate.push({ itemId: item.id, fields });
+      }
+    });
+
+    // Update existing line items (batches of 10)
+    for (let i = 0; i < toUpdate.length; i += 10) {
+      const batch = toUpdate.slice(i, i + 10);
+      const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${tables.lineItemsTableId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: batch })
+      });
+      if (!resp.ok) throw new Error(`Update line items failed: ${resp.status}`);
+    }
+
+    // Create new line items (batches of 10)
+    for (let i = 0; i < toCreate.length; i += 10) {
+      const batch = toCreate.slice(i, i + 10);
+      const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${tables.lineItemsTableId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: batch.map(b => ({ fields: b.fields })) })
+      });
+      if (!resp.ok) throw new Error(`Create line items failed: ${resp.status}`);
+      const data = await resp.json();
+      data.records.forEach((rec, idx) => {
+        const item = items.find(it => it.id === batch[idx].itemId);
+        if (item) item.airtableRecordId = rec.id;
+      });
+    }
+
+    // Save all Airtable record IDs
+    const lineItemRecordIds = {};
+    items.forEach(item => {
+      if (item.airtableRecordId) lineItemRecordIds[String(item.id)] = item.airtableRecordId;
+    });
+    req.airtableLineItemRecordIds = lineItemRecordIds;
+    req.lastPushedAt = new Date().toISOString();
+    saveAllRequests(reqs);
+    autoSaveCurrentRequest();
+
+    pushStatus.textContent = `Pushed at ${new Date().toLocaleTimeString()}`;
+    pushStatus.className = 'push-status ok';
+  } catch(e) {
+    pushStatus.textContent = `Error: ${e.message}`;
+    pushStatus.className = 'push-status err';
+  } finally {
+    pushBtn.disabled = false;
+    pushBtn.textContent = '\u2191 Push to Airtable';
+  }
+}
+
+// Auto-save on header/shipment field changes
+document.addEventListener('change', e => {
+  if(e.target.closest('.app-header') || e.target.closest('.shipment-config') || e.target.id==='summaryNotes') {
+    if (e.target.id === 'hdrExRate') {
+      e.target.dataset.autoSet = 'false';
+      updateExRateStatus('Manual rate');
+    }
+    renderItems();
+    autoSaveCurrentRequest();
+    updateEditorBar();
+    refreshViews();
+  }
+});
+
+// ── Load from Airtable (read-only view) ──
+const AT_BASE = 'appIi4INnoNSh9kru';
+
+async function loadFromAirtable() {
+  const pat = localStorage.getItem('airtable_pat');
+  if (!pat) { alert('Please set your Airtable token in Settings first.'); return; }
+
+  const el = document.getElementById('airtableRequests');
+  el.innerHTML = '<div style="text-align:center;color:#888;padding:20px">Loading from Airtable...</div>';
+
+  try {
+    // Fetch all reorder requests
+    const reqResp = await fetch(`https://api.airtable.com/v0/${AT_BASE}/Reorder%20Requests?sort%5B0%5D%5Bfield%5D=Date&sort%5B0%5D%5Bdirection%5D=desc&pageSize=100`, {
+      headers: { Authorization: `Bearer ${pat}` }
+    });
+    if (!reqResp.ok) throw new Error(`Failed: ${reqResp.status}`);
+    const reqData = await reqResp.json();
+    const requests = reqData.records;
+
+    if (requests.length === 0) {
+      el.innerHTML = '<div style="text-align:center;color:#888;padding:20px">No re-order requests found in Airtable.</div>';
+      return;
+    }
+
+    el.innerHTML = `<div class="at-section-title">
+      <span style="background:#27ae60;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px">&#8595;</span>
+      From Airtable (${requests.length} requests) <span class="at-readonly">READ ONLY</span>
+    </div>` + requests.map(r => {
+      const f = r.fields;
+      const refId = f['Reference ID'] || '—';
+      const title = f['Title'] || 'Untitled';
+      const subtitle = f['Subtitle'] || '';
+      const date = f['Date'] || '';
+      const status = f['Status'] || '';
+      const totalItems = f['Total Items'] || 0;
+      const totalUnits = f['Total Units'] || 0;
+      const totalPieces = f['Total Pieces'] || 0;
+      const statusColor = status === 'Confirmed' ? '#27ae60' : status === 'Sent to Supplier' ? '#e6a817' : '#888';
+      return `<div class="at-card" onclick="viewAirtableRequest('${refId}','${esc(title)}','${esc(subtitle)}','${date}','${status}')">
+        <div class="at-title"><span class="at-badge">${esc(refId)}</span>${esc(subtitle || title)}
+          <span class="at-status" style="background:${statusColor}20;color:${statusColor}">${esc(status)}</span>
+        </div>
+        <div class="at-sub">${esc(title)} &middot; ${esc(date)}</div>
+        <div class="at-stats">
+          <div class="at-stat"><div class="sv">${totalItems}</div><small>items</small></div>
+          <div class="at-stat"><div class="sv">${fmtN(totalUnits)}</div><small>units</small></div>
+          <div class="at-stat"><div class="sv">${fmtN(totalPieces)}</div><small>pieces</small></div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    el.innerHTML = `<div style="color:#d9363e;padding:12px">Error loading from Airtable: ${err.message}</div>`;
+  }
+}
+
+async function viewAirtableRequest(refId, title, subtitle, date, status) {
+  const pat = localStorage.getItem('airtable_pat');
+  if (!pat) return;
+
+  const el = document.getElementById('airtableRequests');
+  el.innerHTML = '<div style="text-align:center;color:#888;padding:20px">Loading line items...</div>';
+
+  try {
+    // Fetch line items by Reference ID
+    const params = new URLSearchParams();
+    params.set('filterByFormula', `{Reference ID}="${refId}"`);
+    params.set('pageSize', '100');
+    const resp = await fetch(`https://api.airtable.com/v0/${AT_BASE}/Reorder%20Line%20Items?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${pat}` }
+    });
+    if (!resp.ok) throw new Error(`Failed: ${resp.status}`);
+    const data = await resp.json();
+    const items = data.records;
+
+    // Split by shipment
+    const s1Items = items.filter(i => (i.fields['S1 Units'] || 0) > 0);
+    const s2Items = items.filter(i => (i.fields['S2 Units'] || 0) > 0);
+
+    function renderItemTable(shipmentItems, unitField) {
+      if (shipmentItems.length === 0) return '<div style="color:#888;padding:8px;font-size:12px">No items</div>';
+      let totalUnits = 0, totalPieces = 0, totalCostRmb = 0, totalCostUsd = 0;
+      const rows = shipmentItems.map(i => {
+        const f = i.fields;
+        const units = f[unitField] || 0;
+        const pieces = units * (f['Pack Qty'] || 1);
+        const costRmb = f['Cost RMB'] || 0;
+        const costUsd = f['Cost USD'] || 0;
+        totalUnits += units;
+        totalPieces += pieces;
+        totalCostRmb += costRmb;
+        totalCostUsd += costUsd;
+        return `<tr>
+          <td style="font-family:monospace;color:#3a5bc7;font-weight:600">${esc(f['ASIN'] || '')}</td>
+          <td>${esc(f['Product Name'] || '')}</td>
+          <td style="text-align:right">${fmtN(units)}</td>
+          <td style="text-align:right">${fmtN(pieces)}</td>
+          <td style="text-align:right">${costRmb ? fmtN(costRmb) : '—'}</td>
+          <td style="text-align:right">${costUsd ? '$' + costUsd.toFixed(2) : '—'}</td>
+        </tr>`;
+      }).join('');
+      return `<table>
+        <thead><tr><th>ASIN</th><th>Product</th><th>Units</th><th>Pieces</th><th>Cost RMB</th><th>Cost USD</th></tr></thead>
+        <tbody>${rows}
+        <tr class="subtotal"><td colspan="2"><strong>Subtotal</strong></td>
+          <td style="text-align:right"><strong>${fmtN(totalUnits)}</strong></td>
+          <td style="text-align:right"><strong>${fmtN(totalPieces)}</strong></td>
+          <td style="text-align:right"><strong>${totalCostRmb ? fmtN(totalCostRmb) : '—'}</strong></td>
+          <td style="text-align:right"><strong>${totalCostUsd ? '$' + totalCostUsd.toFixed(2) : '—'}</strong></td>
+        </tr></tbody>
+      </table>`;
+    }
+
+    let html = `<button class="at-back-btn" onclick="loadFromAirtable()">&#8592; Back to list</button>`;
+    html += `<div class="at-detail">
+      <h3><span class="at-badge" style="font-size:14px">${esc(refId)}</span> ${esc(subtitle || title)} <span class="at-readonly">READ ONLY</span></h3>
+      <div style="color:#888;font-size:12px;margin-bottom:12px">${esc(title)} &middot; ${esc(date)} &middot; ${esc(status)}</div>`;
+
+    if (s1Items.length > 0) {
+      html += `<div class="shipment-header">SHIPMENT 1</div>`;
+      html += renderItemTable(s1Items, 'S1 Units');
+    }
+
+    if (s2Items.length > 0) {
+      html += `<div class="shipment-header s2">SHIPMENT 2</div>`;
+      html += renderItemTable(s2Items, 'S2 Units');
+    }
+
+    if (s1Items.length === 0 && s2Items.length === 0 && items.length > 0) {
+      html += `<div class="shipment-header">ALL ITEMS</div>`;
+      html += renderItemTable(items, 'Total Units');
+    }
+
+    html += `</div>`;
+    el.innerHTML = html;
+  } catch (err) {
+    el.innerHTML = `<button class="at-back-btn" onclick="loadFromAirtable()">&#8592; Back</button>
+      <div style="color:#d9363e;padding:12px">Error: ${err.message}</div>`;
+  }
+}
+</script>
+</body>
+</html>
