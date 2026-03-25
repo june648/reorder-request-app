@@ -32,6 +32,11 @@ A single-page HTML app for managing re-order requests and shipment plans. Replac
 - Table IDs cached in localStorage under `airtable_reorder_tables` key
 - User's Airtable PAT stored in localStorage (configured via Settings gear icon)
 
+## Branding
+- Full-width blue header bar (#3a5bc7) with Seattle Cell Market logo (white filter), divider, app title, "Internal Tools" subtitle
+- Logo file: `logo.png` in root and `public/` directories (sourced from SCM Dashboard project)
+- Top bar sits outside the `.app` container to span full viewport width
+
 ## App Structure
 - **List Screen**: Shows all saved re-order requests as cards (title, date, item/unit/piece counts). "+ New Request" button to create. Click a card to open it. Delete button per card.
 - **Editor Screen**: Opened when a request is selected. Has Back/Save/Delete buttons and a Status dropdown in a top bar.

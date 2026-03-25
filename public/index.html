@@ -11,8 +11,12 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f6f
 .app{max-width:1320px;margin:0 auto;padding:0 20px 20px}
 
 /* Top Bar */
-.top-bar{background:#3a5bc7;color:#fff;padding:12px 28px;margin:0 -20px 16px;display:flex;align-items:center;gap:14px}
-.top-bar h1{font-size:16px;font-weight:700;letter-spacing:.3px}
+.top-bar{background:#3a5bc7;color:#fff;padding:12px 28px;margin:0 0 16px;display:flex;align-items:center;gap:14px}
+.top-bar .logo-section{display:flex;align-items:center;gap:14px}
+.top-bar .logo-section img{height:36px;filter:brightness(0) invert(1)}
+.top-bar .logo-divider{width:1px;height:32px;background:rgba(255,255,255,.3)}
+.top-bar h1{font-size:16px;font-weight:700;letter-spacing:.3px;line-height:1.2}
+.top-bar .top-bar-subtitle{font-size:11px;opacity:.8;font-weight:400}
 .top-bar .settings-icon{margin-left:auto;background:none;border:none;cursor:pointer;color:rgba(255,255,255,.8);display:flex;align-items:center}
 .top-bar .settings-icon:hover{color:#fff}
 .top-bar .settings-icon svg{width:20px;height:20px}
@@ -215,15 +219,23 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
 </style>
 </head>
 <body>
-<div class="app">
 
 <!-- Top Bar -->
 <div class="top-bar">
-  <h1>Re-Order Request Management</h1>
+  <div class="logo-section">
+    <img src="logo.png" alt="Seattle Cell Market">
+    <div class="logo-divider"></div>
+    <div>
+      <h1>Re-Order Request Management</h1>
+      <div class="top-bar-subtitle">Internal Tools</div>
+    </div>
+  </div>
   <button class="settings-icon" onclick="openSettings()" title="Settings">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
   </button>
 </div>
+
+<div class="app">
 
 <!-- ======== LIST SCREEN ======== -->
 <div class="screen active" id="listScreen">
