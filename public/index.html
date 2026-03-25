@@ -182,6 +182,15 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
 .push-status.ok{color:#27ae60}
 .push-status.err{color:#d9363e}
 .rc-pushed{font-size:10px;color:#27ae60}
+.rc-status{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle}
+.rc-status.draft{background:#fef3cd;color:#856404}
+.rc-status.for-approval{background:#d1ecf1;color:#0c5460}
+.rc-status.approved{background:#d4edda;color:#155724}
+.status-select{border:1px solid #d0d5dd;border-radius:6px;padding:5px 10px;font-size:13px;font-weight:600;font-family:inherit;outline:none;cursor:pointer;transition:border .15s}
+.status-select:focus{border-color:#4a7cff}
+.status-select.draft{background:#fef3cd;color:#856404}
+.status-select.for-approval{background:#d1ecf1;color:#0c5460}
+.status-select.approved{background:#d4edda;color:#155724}
 .at-section-title{font-size:14px;font-weight:700;color:#27ae60;margin-bottom:8px;display:flex;align-items:center;gap:8px}
 .at-card{background:#fff;border-radius:10px;padding:16px 22px;box-shadow:0 1px 4px rgba(0,0,0,.08);border:1px solid #d4edda;margin-bottom:8px;cursor:pointer;transition:box-shadow .15s}
 .at-card:hover{box-shadow:0 3px 12px rgba(0,0,0,.12)}
@@ -240,6 +249,11 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
       <div class="ebar-sub" id="ebarSub"></div>
     </div>
     <span class="ref-id-badge" id="ebarRefId"></span>
+    <select class="status-select draft" id="statusSelect" onchange="onStatusChange()">
+      <option value="Draft">Draft</option>
+      <option value="For Approval">For Approval</option>
+      <option value="Approved">Approved</option>
+    </select>
     <button class="save-btn" onclick="saveCurrentRequest()">Save</button>
     <button class="push-btn" onclick="pushToAirtable()">&#8593; Push to Airtable</button>
     <span class="push-status" id="pushStatus"></span>
@@ -526,7 +540,7 @@ function renderRequestList() {
     const totalPieces = (s.items || []).reduce((a,i) => a + getItemTotalUnits(i) * (i.packQty||1), 0);
     return `<div class="request-card" onclick="openRequest('${r.id}')">
       <div class="rc-info">
-        <div class="rc-title"><span class="ref-badge">${esc(r.refId || '—')}</span>${esc(title)}</div>
+        <div class="rc-title"><span class="ref-badge">${esc(r.refId || '—')}</span>${esc(title)}<span class="rc-status ${statusClass(s.status || 'Draft')}">${esc(s.status || 'Draft')}</span></div>
         <div class="rc-sub">${esc(s.hdrTitle || '')} &middot; ${esc(date)}${r.lastPushedAt ? ' <span class="rc-pushed">&#9679; Synced</span>' : ''}</div>
       </div>
       <div class="rc-stats">
@@ -621,6 +635,12 @@ function updateEditorBar() {
   document.getElementById('ebarSub').textContent = `${document.getElementById('hdrTitle').value} \u00b7 ${date}`;
   document.getElementById('ebarRefId').textContent = currentRefId || '';
 }
+
+function onStatusChange() {
+  const sel = document.getElementById('statusSelect');
+  sel.className = 'status-select ' + statusClass(sel.value);
+}
+function statusClass(v) { return v === 'For Approval' ? 'for-approval' : v.toLowerCase(); }
 
 // ── Tab Switching ──
 function switchTab(tab) {
@@ -1234,6 +1254,7 @@ function gatherState() {
     exchangeRate: parseFloat(document.getElementById('hdrExRate').value) || null,
     shipments: shipments,
     shipmentIdCounter: shipmentIdCounter,
+    status: document.getElementById('statusSelect').value,
     summaryNotes: document.getElementById('summaryNotes').value,
     items: items,
     idCounter: idCounter
@@ -1251,6 +1272,7 @@ function applyState(s) {
     document.getElementById('hdrExRate').dataset.autoSet = 'false';
     updateExRateStatus('Saved rate');
   }
+  if(s.status) { document.getElementById('statusSelect').value = s.status; onStatusChange(); }
   if(s.summaryNotes!==undefined) document.getElementById('summaryNotes').value=s.summaryNotes;
   if(s.shipments) { shipments = s.shipments; }
   if(s.shipmentIdCounter) { shipmentIdCounter = s.shipmentIdCounter; }
@@ -1271,6 +1293,7 @@ function resetEditorDefaults() {
   document.getElementById('hdrExRate').value = liveExchangeRate.toFixed(4);
   document.getElementById('hdrExRate').dataset.autoSet = 'true';
   updateExRateStatus('Live rate');
+  document.getElementById('statusSelect').value = 'Draft'; onStatusChange();
   document.getElementById('summaryNotes').value = '';
 }
 
@@ -1382,8 +1405,8 @@ async function createRequestsTable(pat) {
       { name: 'Exchange Rate', type: 'number', options: { precision: 6 } },
       { name: 'Status', type: 'singleSelect', options: { choices: [
         { name: 'Draft', color: 'yellowLight2' },
-        { name: 'Sent to Supplier', color: 'blueLight2' },
-        { name: 'Confirmed', color: 'greenLight2' }
+        { name: 'For Approval', color: 'blueLight2' },
+        { name: 'Approved', color: 'greenLight2' }
       ]}},
       { name: 'Notes', type: 'multilineText' }
     ]
@@ -1469,13 +1492,24 @@ async function pushToAirtable() {
       'S2 Method': shipments[1] ? shipments[1].method : '',
       'S2 Destination': shipments[1] ? shipments[1].destination : '',
       'S2 Description': shipments[1] ? shipments[1].description : '',
+      'S1 Name': shipments[0] ? getShipmentLabel(shipments[0]) : '',
+      'S2 Name': shipments[1] ? getShipmentLabel(shipments[1]) : '',
+      'S3 Name': shipments[2] ? getShipmentLabel(shipments[2]) : '',
+      'S4 Name': shipments[3] ? getShipmentLabel(shipments[3]) : '',
+      'S5 Name': shipments[4] ? getShipmentLabel(shipments[4]) : '',
+      'S6 Name': shipments[5] ? getShipmentLabel(shipments[5]) : '',
+      'S7 Name': shipments[6] ? getShipmentLabel(shipments[6]) : '',
+      'S8 Name': shipments[7] ? getShipmentLabel(shipments[7]) : '',
+      'S9 Name': shipments[8] ? getShipmentLabel(shipments[8]) : '',
+      'S10 Name': shipments[9] ? getShipmentLabel(shipments[9]) : '',
       'Total Items': tot.length,
       'Total Units': sum(tot, 'units'),
       'Total Pieces': sum(tot, 'pieces'),
       'Total Cost RMB': round2(sum(tot, 'costRmb')),
       'Total Cost USD': round2(sum(tot, 'costUsd')),
       'Exchange Rate': getActiveExchangeRate(),
-      'Notes': document.getElementById('summaryNotes').value
+      'Notes': document.getElementById('summaryNotes').value,
+      'Status': document.getElementById('statusSelect').value
     };
 
     // Create or update request record
@@ -1488,7 +1522,6 @@ async function pushToAirtable() {
       });
       if (!resp.ok) { const err = await resp.text(); throw new Error(`Update request failed: ${resp.status} — ${err}`); }
     } else {
-      requestFields['Status'] = 'Draft';
       const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${tables.requestsTableId}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
@@ -1540,6 +1573,14 @@ async function pushToAirtable() {
         'Units By Shipment': JSON.stringify(item.units || {}),
         'S1 Units': shipments[0] ? (item.units[shipments[0].id] || 0) : 0,
         'S2 Units': shipments[1] ? (item.units[shipments[1].id] || 0) : 0,
+        'S3 Units': shipments[2] ? (item.units[shipments[2].id] || 0) : 0,
+        'S4 Units': shipments[3] ? (item.units[shipments[3].id] || 0) : 0,
+        'S5 Units': shipments[4] ? (item.units[shipments[4].id] || 0) : 0,
+        'S6 Units': shipments[5] ? (item.units[shipments[5].id] || 0) : 0,
+        'S7 Units': shipments[6] ? (item.units[shipments[6].id] || 0) : 0,
+        'S8 Units': shipments[7] ? (item.units[shipments[7].id] || 0) : 0,
+        'S9 Units': shipments[8] ? (item.units[shipments[8].id] || 0) : 0,
+        'S10 Units': shipments[9] ? (item.units[shipments[9].id] || 0) : 0,
         'Total Units': totalUnits,
         'Total Pieces': pieces,
         'Cost RMB': round2(costRmb),
@@ -1654,7 +1695,7 @@ async function loadFromAirtable() {
       const totalItems = f['Total Items'] || 0;
       const totalUnits = f['Total Units'] || 0;
       const totalPieces = f['Total Pieces'] || 0;
-      const statusColor = status === 'Confirmed' ? '#27ae60' : status === 'Sent to Supplier' ? '#e6a817' : '#888';
+      const statusColor = status === 'Approved' ? '#27ae60' : status === 'For Approval' ? '#0c5460' : '#856404';
       return `<div class="at-card" onclick="viewAirtableRequest('${refId}','${esc(title)}','${esc(subtitle)}','${date}','${status}')">
         <div class="at-title"><span class="at-badge">${esc(refId)}</span>${esc(subtitle || title)}
           <span class="at-status" style="background:${statusColor}20;color:${statusColor}">${esc(status)}</span>
@@ -1679,7 +1720,25 @@ async function viewAirtableRequest(refId, title, subtitle, date, status) {
   const el = document.getElementById('airtableRequests');
   el.innerHTML = '<div style="text-align:center;color:#888;padding:20px">Loading line items...</div>';
 
+  const shipmentColors = ['#27AE60','#7D3C98','#E67E22','#2980B9','#C0392B','#16A085','#8E44AD','#D4AC0D'];
+
   try {
+    // Fetch request record to get Shipments Config
+    const reqParams = new URLSearchParams();
+    reqParams.set('filterByFormula', `{Reference ID}="${refId}"`);
+    reqParams.set('pageSize', '1');
+    const reqResp = await fetch(`https://api.airtable.com/v0/${AT_BASE}/Reorder%20Requests?${reqParams.toString()}`, {
+      headers: { Authorization: `Bearer ${pat}` }
+    });
+    let shipmentsConfig = null;
+    if (reqResp.ok) {
+      const reqData = await reqResp.json();
+      if (reqData.records.length > 0) {
+        const configStr = reqData.records[0].fields['Shipments Config'];
+        if (configStr) try { shipmentsConfig = JSON.parse(configStr); } catch(e) {}
+      }
+    }
+
     // Fetch line items by Reference ID
     const params = new URLSearchParams();
     params.set('filterByFormula', `{Reference ID}="${refId}"`);
@@ -1691,19 +1750,17 @@ async function viewAirtableRequest(refId, title, subtitle, date, status) {
     const data = await resp.json();
     const items = data.records;
 
-    // Split by shipment
-    const s1Items = items.filter(i => (i.fields['S1 Units'] || 0) > 0);
-    const s2Items = items.filter(i => (i.fields['S2 Units'] || 0) > 0);
-
-    function renderItemTable(shipmentItems, unitField) {
+    function renderItemTable(shipmentItems, getUnits) {
       if (shipmentItems.length === 0) return '<div style="color:#888;padding:8px;font-size:12px">No items</div>';
       let totalUnits = 0, totalPieces = 0, totalCostRmb = 0, totalCostUsd = 0;
       const rows = shipmentItems.map(i => {
         const f = i.fields;
-        const units = f[unitField] || 0;
+        const units = getUnits(i);
         const pieces = units * (f['Pack Qty'] || 1);
-        const costRmb = f['Cost RMB'] || 0;
-        const costUsd = f['Cost USD'] || 0;
+        const costPerPiece = f['Cost Per Piece RMB'] || 0;
+        const exRate = f['Cost USD'] && f['Cost RMB'] ? f['Cost USD'] / f['Cost RMB'] : 0.1381;
+        const costRmb = pieces * costPerPiece;
+        const costUsd = costRmb * exRate;
         totalUnits += units;
         totalPieces += pieces;
         totalCostRmb += costRmb;
@@ -1713,7 +1770,7 @@ async function viewAirtableRequest(refId, title, subtitle, date, status) {
           <td>${esc(f['Product Name'] || '')}</td>
           <td style="text-align:right">${fmtN(units)}</td>
           <td style="text-align:right">${fmtN(pieces)}</td>
-          <td style="text-align:right">${costRmb ? fmtN(costRmb) : '—'}</td>
+          <td style="text-align:right">${costRmb ? fmtN(Math.round(costRmb)) : '—'}</td>
           <td style="text-align:right">${costUsd ? '$' + costUsd.toFixed(2) : '—'}</td>
         </tr>`;
       }).join('');
@@ -1723,7 +1780,7 @@ async function viewAirtableRequest(refId, title, subtitle, date, status) {
         <tr class="subtotal"><td colspan="2"><strong>Subtotal</strong></td>
           <td style="text-align:right"><strong>${fmtN(totalUnits)}</strong></td>
           <td style="text-align:right"><strong>${fmtN(totalPieces)}</strong></td>
-          <td style="text-align:right"><strong>${totalCostRmb ? fmtN(totalCostRmb) : '—'}</strong></td>
+          <td style="text-align:right"><strong>${totalCostRmb ? fmtN(Math.round(totalCostRmb)) : '—'}</strong></td>
           <td style="text-align:right"><strong>${totalCostUsd ? '$' + totalCostUsd.toFixed(2) : '—'}</strong></td>
         </tr></tbody>
       </table>`;
@@ -1734,19 +1791,41 @@ async function viewAirtableRequest(refId, title, subtitle, date, status) {
       <h3><span class="at-badge" style="font-size:14px">${esc(refId)}</span> ${esc(subtitle || title)} <span class="at-readonly">READ ONLY</span></h3>
       <div style="color:#888;font-size:12px;margin-bottom:12px">${esc(title)} &middot; ${esc(date)} &middot; ${esc(status)}</div>`;
 
-    if (s1Items.length > 0) {
-      html += `<div class="shipment-header">SHIPMENT 1</div>`;
-      html += renderItemTable(s1Items, 'S1 Units');
-    }
+    if (shipmentsConfig && shipmentsConfig.length > 0) {
+      // N-shipment mode: use Shipments Config + Units By Shipment JSON
+      shipmentsConfig.forEach((ship, idx) => {
+        const color = shipmentColors[idx % shipmentColors.length];
+        const label = `SHIPMENT ${idx + 1} — ${ship.method} to ${ship.destination}`;
+        const shipItems = items.filter(i => {
+          const ubsStr = i.fields['Units By Shipment'];
+          if (!ubsStr) return false;
+          try { const ubs = JSON.parse(ubsStr); return (ubs[ship.id] || 0) > 0; } catch(e) { return false; }
+        });
+        if (shipItems.length > 0) {
+          html += `<div class="shipment-header" style="background:${color}">${esc(label)}</div>`;
+          if (ship.description) html += `<div style="font-style:italic;color:#666;font-size:12px;margin:4px 0 8px">${esc(ship.description)}</div>`;
+          html += renderItemTable(shipItems, i => {
+            try { const ubs = JSON.parse(i.fields['Units By Shipment']); return ubs[ship.id] || 0; } catch(e) { return 0; }
+          });
+        }
+      });
+    } else {
+      // Fallback: old S1/S2 fields
+      const s1Items = items.filter(i => (i.fields['S1 Units'] || 0) > 0);
+      const s2Items = items.filter(i => (i.fields['S2 Units'] || 0) > 0);
 
-    if (s2Items.length > 0) {
-      html += `<div class="shipment-header s2">SHIPMENT 2</div>`;
-      html += renderItemTable(s2Items, 'S2 Units');
-    }
-
-    if (s1Items.length === 0 && s2Items.length === 0 && items.length > 0) {
-      html += `<div class="shipment-header">ALL ITEMS</div>`;
-      html += renderItemTable(items, 'Total Units');
+      if (s1Items.length > 0) {
+        html += `<div class="shipment-header">SHIPMENT 1</div>`;
+        html += renderItemTable(s1Items, i => i.fields['S1 Units'] || 0);
+      }
+      if (s2Items.length > 0) {
+        html += `<div class="shipment-header s2">SHIPMENT 2</div>`;
+        html += renderItemTable(s2Items, i => i.fields['S2 Units'] || 0);
+      }
+      if (s1Items.length === 0 && s2Items.length === 0 && items.length > 0) {
+        html += `<div class="shipment-header">ALL ITEMS</div>`;
+        html += renderItemTable(items, i => i.fields['Total Units'] || 0);
+      }
     }
 
     html += `</div>`;

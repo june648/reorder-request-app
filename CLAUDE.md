@@ -26,15 +26,15 @@ A single-page HTML app for managing re-order requests and shipment plans. Replac
     - `Per Piece Cost (RMB)` (fldSc8CgYfqydf9Vf)
     - `Yun Description` (fldffzSXF7Tsjs8xD)
 - **Reorder Requests Table** (auto-created on first push) — master request records
-  - Fields: Reference ID, Title, Subtitle, Date, Shipments Config (JSON), S1/S2 Method/Destination/Description (backward compat), Total Items/Units/Pieces, Total Cost RMB/USD, Exchange Rate, Status (Draft/Sent to Supplier/Confirmed), Notes
+  - Fields: Reference ID, Title, Subtitle, Date, Shipments Config (JSON), S1/S2 Method/Destination/Description (backward compat), S1–S10 Name (shipment labels), Total Items/Units/Pieces, Total Cost RMB/USD, Exchange Rate, Status (Draft/For Approval/Approved), Notes
 - **Reorder Line Items Table** (auto-created on first push) — individual product rows, linked to parent request
-  - Fields: Reference ID (primary), Request (linked record), ASIN, Product Name, UPC, FNSKU, Yun Description, Type (Catalog/New Product), Pack Qty, Cost Per Piece RMB, Units By Shipment (JSON), S1 Units, S2 Units (backward compat), Total Units, Total Pieces, Cost RMB, Cost USD
+  - Fields: Reference ID (primary), Request (linked record), ASIN, Product Name, UPC, FNSKU, Yun Description, Type (Catalog/New Product), Pack Qty, Cost Per Piece RMB, Units By Shipment (JSON), S1–S10 Units, Total Units, Total Pieces, Cost RMB, Cost USD
 - Table IDs cached in localStorage under `airtable_reorder_tables` key
 - User's Airtable PAT stored in localStorage (configured via Settings gear icon)
 
 ## App Structure
 - **List Screen**: Shows all saved re-order requests as cards (title, date, item/unit/piece counts). "+ New Request" button to create. Click a card to open it. Delete button per card.
-- **Editor Screen**: Opened when a request is selected. Has Back/Save/Delete buttons in a top bar.
+- **Editor Screen**: Opened when a request is selected. Has Back/Save/Delete buttons and a Status dropdown in a top bar.
   - **Data Entry tab**: Shipment config (add/remove shipments, method, destination, description) + item table. Pack Qty is read-only (pulled from Airtable). Exchange rate field in header (editable, with "Fetch Live" button, saved per request).
   - **Sir Ohad View tab**: Formatted view with costs, subtotals, grand total — downloadable as Excel
   - **Supplier View tab**: Formatted view without costs — downloadable as Excel
@@ -53,11 +53,17 @@ Each item row has a **Type** dropdown (first column):
 - Displayed as badge on list cards and in editor bar
 - Pushed to Airtable as the key identifier for both request and line item records
 
+## Status
+- Dropdown in editor bar with three values: **Draft** (yellow), **For Approval** (blue), **Approved** (green)
+- New requests default to "Draft"
+- Status is persisted in state and shown as a color-coded badge on list cards
+- Pushed to Airtable on every push (both create and update)
+
 ## Push to Airtable
 - **Manual only** — triggered by explicit "Push to Airtable" button in editor bar
 - First push auto-creates `Reorder Requests` and `Reorder Line Items` tables if they don't exist
 - Subsequent pushes update existing Airtable records (tracked via stored record IDs per request/item)
-- Status field set to "Draft" on first push, then left untouched on updates (can be changed in Airtable)
+- Status is always synced to Airtable on push
 - Deleted items: orphaned Airtable line item records are cleaned up on re-push
 - Batches writes in groups of 10 (Airtable API limit)
 - "Synced" indicator shown on list cards for pushed requests
