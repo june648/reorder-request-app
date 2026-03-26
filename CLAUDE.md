@@ -63,6 +63,7 @@ Each item row has a **Type** dropdown (first column):
 - New requests default to "Draft"
 - Status is persisted in state and shown as a color-coded badge on list cards
 - Pushed to Airtable on every push (both create and update)
+- **Approved requests cannot be deleted** — Delete button is hidden on both list cards and editor bar; status change back from Approved re-enables deletion
 
 ## Push to Airtable
 - **Manual only** — triggered by explicit "Push to Airtable" button in editor bar

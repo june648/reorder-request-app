@@ -561,7 +561,7 @@ function renderRequestList() {
         <div class="stat"><div class="sv">${fmtN(totalPieces)}</div>pieces</div>
       </div>
       <div class="rc-date">${esc(date)}</div>
-      <button class="rc-del" onclick="event.stopPropagation();deleteRequest('${r.id}')">Delete</button>
+      ${(s.status || 'Draft') === 'Approved' ? '' : `<button class="rc-del" onclick="event.stopPropagation();deleteRequest('${r.id}')">Delete</button>`}
     </div>`;
   }).join('');
 }
@@ -621,6 +621,8 @@ function autoSaveCurrentRequest() {
 }
 
 function deleteCurrentRequest() {
+  const cur = getAllRequests().find(r => r.id === currentRequestId);
+  if (cur && (cur.state?.status || 'Draft') === 'Approved') { alert('Approved requests cannot be deleted.'); return; }
   if (!confirm('Delete this re-order request? This cannot be undone.')) return;
   const reqs = getAllRequests().filter(r => r.id !== currentRequestId);
   saveAllRequests(reqs);
@@ -634,6 +636,8 @@ function deleteCurrentRequest() {
 }
 
 function deleteRequest(id) {
+  const req = getAllRequests().find(r => r.id === id);
+  if (req && (req.state?.status || 'Draft') === 'Approved') { alert('Approved requests cannot be deleted.'); return; }
   if (!confirm('Delete this re-order request?')) return;
   const reqs = getAllRequests().filter(r => r.id !== id);
   saveAllRequests(reqs);
@@ -651,6 +655,7 @@ function updateEditorBar() {
 function onStatusChange() {
   const sel = document.getElementById('statusSelect');
   sel.className = 'status-select ' + statusClass(sel.value);
+  document.querySelector('.del-btn-top').style.display = sel.value === 'Approved' ? 'none' : '';
 }
 function statusClass(v) { return v === 'For Approval' ? 'for-approval' : v.toLowerCase(); }
 
