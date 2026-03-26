@@ -196,14 +196,16 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
 .status-select.for-approval{background:#d1ecf1;color:#0c5460}
 .status-select.approved{background:#d4edda;color:#155724}
 .at-section-title{font-size:14px;font-weight:700;color:#27ae60;margin-bottom:8px;display:flex;align-items:center;gap:8px}
-.at-card{background:#fff;border-radius:10px;padding:16px 22px;box-shadow:0 1px 4px rgba(0,0,0,.08);border:1px solid #d4edda;margin-bottom:8px;cursor:pointer;transition:box-shadow .15s}
+.at-card{background:#fff;border-radius:10px;padding:16px 22px;box-shadow:0 1px 4px rgba(0,0,0,.08);border:1px solid #d4edda;margin-bottom:8px;cursor:pointer;transition:box-shadow .15s;display:flex;align-items:center;gap:16px}
 .at-card:hover{box-shadow:0 3px 12px rgba(0,0,0,.12)}
+.at-card .at-info{flex:1}
 .at-card .at-title{font-weight:700;font-size:14px}
 .at-card .at-sub{font-size:12px;color:#888;margin-top:2px}
-.at-card .at-stats{display:flex;gap:16px;margin-top:8px}
+.at-card .at-stats{display:flex;gap:16px;align-items:center;font-size:12px;color:#666}
 .at-card .at-stat{text-align:center}
 .at-card .at-stat .sv{font-size:16px;font-weight:700;color:#3a5bc7}
 .at-card .at-stat small{font-size:10px;color:#888;display:block}
+.at-card .at-date{font-size:12px;color:#999;min-width:90px;text-align:right}
 .at-badge{display:inline-block;background:#edf2ff;color:#3a5bc7;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;font-family:'Courier New',monospace;margin-right:6px}
 .at-status{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:8px}
 .at-readonly{display:inline-block;font-size:9px;background:#fff3e0;color:#e65100;padding:2px 6px;border-radius:4px;font-weight:600;margin-left:6px}
@@ -1714,15 +1716,18 @@ async function loadFromAirtable() {
       const totalPieces = f['Total Pieces'] || 0;
       const statusColor = status === 'Approved' ? '#27ae60' : status === 'For Approval' ? '#0c5460' : '#856404';
       return `<div class="at-card" onclick="viewAirtableRequest('${refId}','${esc(title)}','${esc(subtitle)}','${date}','${status}')">
-        <div class="at-title"><span class="at-badge">${esc(refId)}</span>${esc(subtitle || title)}
-          <span class="at-status" style="background:${statusColor}20;color:${statusColor}">${esc(status)}</span>
+        <div class="at-info">
+          <div class="at-title"><span class="at-badge">${esc(refId)}</span>${esc(subtitle || title)}
+            <span class="at-status" style="background:${statusColor}20;color:${statusColor}">${esc(status)}</span>
+          </div>
+          <div class="at-sub">${esc(title)} &middot; ${esc(date)}</div>
         </div>
-        <div class="at-sub">${esc(title)} &middot; ${esc(date)}</div>
         <div class="at-stats">
           <div class="at-stat"><div class="sv">${totalItems}</div><small>items</small></div>
           <div class="at-stat"><div class="sv">${fmtN(totalUnits)}</div><small>units</small></div>
           <div class="at-stat"><div class="sv">${fmtN(totalPieces)}</div><small>pieces</small></div>
         </div>
+        <div class="at-date">${esc(date)}</div>
       </div>`;
     }).join('');
   } catch (err) {
