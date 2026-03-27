@@ -209,6 +209,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
 .at-badge{display:inline-block;background:#edf2ff;color:#3a5bc7;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;font-family:'Courier New',monospace;margin-right:6px}
 .at-status{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:8px}
 .at-readonly{display:inline-block;font-size:9px;background:#fff3e0;color:#e65100;padding:2px 6px;border-radius:4px;font-weight:600;margin-left:6px}
+.at-import-btn{background:#3a5bc7;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;min-width:80px}.at-import-btn:hover{background:#2a4ab7}
 .at-detail{background:#f8f9fc;border-radius:10px;padding:20px;border:1px solid #d4edda;margin-bottom:16px}
 .at-detail h3{font-size:16px;margin-bottom:12px;color:#3a5bc7}
 .at-detail table{width:100%;border-collapse:collapse;font-size:12px}
@@ -404,6 +405,7 @@ let shipments = [];
 let shipmentIdCounter = 0;
 let liveExchangeRate = 0.1381;
 let currentRequestId = null;
+let knownAirtableRefIds = [];
 let currentRefId = null;
 
 // ── Init ──
@@ -1318,9 +1320,10 @@ function resetEditorDefaults() {
 
 // ── Reference ID ──
 function generateRefId() {
-  const existing = getAllRequests().map(r => r.refId).filter(Boolean);
+  const localRefs = getAllRequests().map(r => r.refId).filter(Boolean);
+  const allRefs = [...new Set([...localRefs, ...knownAirtableRefIds])];
   let maxNum = 0;
-  for (const ref of existing) {
+  for (const ref of allRefs) {
     const m = ref.match(/^SCM(\d+)$/);
     if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
   }
@@ -1680,6 +1683,79 @@ document.addEventListener('change', e => {
 // ── Load from Airtable (read-only view) ──
 const AT_BASE = 'appIi4INnoNSh9kru';
 
+async function fixDuplicateAirtableRefIds(requests, pat) {
+  // Find duplicate ref IDs
+  const seen = {};
+  const duplicates = [];
+  for (const r of requests) {
+    const refId = r.fields['Reference ID'];
+    if (!refId) continue;
+    if (seen[refId]) { duplicates.push(r); } else { seen[refId] = r; }
+  }
+  if (duplicates.length === 0) return;
+
+  // Collect all known ref IDs (local + Airtable) to find max
+  const localRefs = getAllRequests().map(r => r.refId).filter(Boolean);
+  const allRefs = [...new Set([...localRefs, ...requests.map(r => r.fields['Reference ID']).filter(Boolean)])];
+  let maxNum = 0;
+  for (const ref of allRefs) {
+    const m = ref.match(/^SCM(\d+)$/);
+    if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
+  }
+
+  // Assign new ref IDs to duplicates (newer records get new IDs)
+  for (const r of duplicates) {
+    maxNum++;
+    const newRefId = 'SCM' + String(maxNum).padStart(7, '0');
+    const oldRefId = r.fields['Reference ID'];
+
+    // Update request record in Airtable
+    await fetch(`https://api.airtable.com/v0/${AT_BASE}/Reorder%20Requests/${r.id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { 'Reference ID': newRefId } })
+    });
+
+    // Update line items that belong to this request (use linked record)
+    const itemParams = new URLSearchParams();
+    itemParams.set('filterByFormula', `RECORD_ID()!=""`);
+    itemParams.set('pageSize', '100');
+    const itemResp = await fetch(`https://api.airtable.com/v0/${AT_BASE}/Reorder%20Line%20Items?${itemParams.toString()}`, {
+      headers: { Authorization: `Bearer ${pat}` }
+    });
+    if (itemResp.ok) {
+      const itemData = await itemResp.json();
+      const toUpdate = itemData.records.filter(li => {
+        const reqLink = li.fields['Request'];
+        return reqLink && reqLink.includes(r.id);
+      });
+      // Batch update in groups of 10
+      for (let i = 0; i < toUpdate.length; i += 10) {
+        const batch = toUpdate.slice(i, i + 10);
+        await fetch(`https://api.airtable.com/v0/${AT_BASE}/Reorder%20Line%20Items`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ records: batch.map(li => ({ id: li.id, fields: { 'Reference ID': newRefId } })) })
+        });
+      }
+    }
+
+    // Update in-memory record
+    r.fields['Reference ID'] = newRefId;
+
+    // Also fix local request if it exists
+    const reqs = getAllRequests();
+    const localReq = reqs.find(lr => lr.airtableRequestRecordId === r.id);
+    if (localReq) {
+      localReq.refId = newRefId;
+      saveAllRequests(reqs);
+      renderRequestList();
+    }
+
+    console.log(`Fixed duplicate ref ID: ${oldRefId} → ${newRefId} for "${r.fields['Subtitle'] || r.fields['Title']}"`);
+  }
+}
+
 async function loadFromAirtable() {
   const pat = localStorage.getItem('airtable_pat');
   if (!pat) { alert('Please set your Airtable token in Settings first.'); return; }
@@ -1701,10 +1777,25 @@ async function loadFromAirtable() {
       return;
     }
 
+    knownAirtableRefIds = requests.map(r => r.fields['Reference ID']).filter(Boolean);
+
+    // Auto-fix duplicate ref IDs in Airtable
+    await fixDuplicateAirtableRefIds(requests, pat);
+    // Re-read after fix
+    knownAirtableRefIds = requests.map(r => r.fields['Reference ID']).filter(Boolean);
+
+    const localRefIds = new Set(getAllRequests().map(lr => lr.refId).filter(Boolean));
+    const remoteOnly = requests.filter(r => !localRefIds.has(r.fields['Reference ID']));
+
+    if (remoteOnly.length === 0) {
+      el.innerHTML = '<div style="text-align:center;color:#888;padding:20px;font-size:13px">All Airtable requests are already imported locally.</div>';
+      return;
+    }
+
     el.innerHTML = `<div class="at-section-title">
       <span style="background:#27ae60;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px">&#8595;</span>
-      From Airtable (${requests.length} requests) <span class="at-readonly">READ ONLY</span>
-    </div>` + requests.map(r => {
+      From Airtable (${remoteOnly.length} not yet imported)
+    </div>` + remoteOnly.map(r => {
       const f = r.fields;
       const refId = f['Reference ID'] || '—';
       const title = f['Title'] || 'Untitled';
@@ -1728,6 +1819,7 @@ async function loadFromAirtable() {
           <div class="at-stat"><div class="sv">${fmtN(totalPieces)}</div><small>pieces</small></div>
         </div>
         <div class="at-date">${esc(date)}</div>
+        <button class="at-import-btn" onclick="event.stopPropagation();importFromAirtable('${refId}')">&#8615; Import</button>
       </div>`;
     }).join('');
   } catch (err) {
@@ -1808,7 +1900,10 @@ async function viewAirtableRequest(refId, title, subtitle, date, status) {
       </table>`;
     }
 
-    let html = `<button class="at-back-btn" onclick="loadFromAirtable()">&#8592; Back to list</button>`;
+    let html = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <button class="at-back-btn" onclick="loadFromAirtable()" style="margin:0">&#8592; Back to list</button>
+      <button class="at-import-btn" onclick="importFromAirtable('${refId}')" style="padding:8px 20px;font-size:13px">&#8615; Import to Local &amp; Edit</button>
+    </div>`;
     html += `<div class="at-detail">
       <h3><span class="at-badge" style="font-size:14px">${esc(refId)}</span> ${esc(subtitle || title)} <span class="at-readonly">READ ONLY</span></h3>
       <div style="color:#888;font-size:12px;margin-bottom:12px">${esc(title)} &middot; ${esc(date)} &middot; ${esc(status)}</div>`;
@@ -1855,6 +1950,149 @@ async function viewAirtableRequest(refId, title, subtitle, date, status) {
   } catch (err) {
     el.innerHTML = `<button class="at-back-btn" onclick="loadFromAirtable()">&#8592; Back</button>
       <div style="color:#d9363e;padding:12px">Error: ${err.message}</div>`;
+  }
+}
+
+// ── Import from Airtable to local editable storage ──
+async function importFromAirtable(refId) {
+  const pat = localStorage.getItem('airtable_pat');
+  if (!pat) { alert('Please set your Airtable token in Settings first.'); return; }
+
+  // Check if already exists locally
+  const existing = getAllRequests().find(r => r.refId === refId);
+  if (existing && !confirm('This request already exists locally. Re-import and overwrite?')) return;
+
+  const el = document.getElementById('airtableRequests');
+  const prevHtml = el.innerHTML;
+  el.innerHTML = '<div style="text-align:center;color:#888;padding:20px">Importing ' + refId + '...</div>';
+
+  try {
+    // Fetch request record
+    const reqParams = new URLSearchParams();
+    reqParams.set('filterByFormula', `{Reference ID}="${refId}"`);
+    reqParams.set('pageSize', '1');
+    const reqResp = await fetch(`https://api.airtable.com/v0/${AT_BASE}/Reorder%20Requests?${reqParams.toString()}`, {
+      headers: { Authorization: `Bearer ${pat}` }
+    });
+    if (!reqResp.ok) throw new Error('Failed to fetch request: ' + reqResp.status);
+    const reqData = await reqResp.json();
+    if (reqData.records.length === 0) throw new Error('Request not found in Airtable');
+    const reqRecord = reqData.records[0];
+    const rf = reqRecord.fields;
+
+    // Fetch line items
+    const itemParams = new URLSearchParams();
+    itemParams.set('filterByFormula', `{Reference ID}="${refId}"`);
+    itemParams.set('pageSize', '100');
+    const itemResp = await fetch(`https://api.airtable.com/v0/${AT_BASE}/Reorder%20Line%20Items?${itemParams.toString()}`, {
+      headers: { Authorization: `Bearer ${pat}` }
+    });
+    if (!itemResp.ok) throw new Error('Failed to fetch line items: ' + itemResp.status);
+    const itemData = await itemResp.json();
+
+    // Parse shipments config
+    let importedShipments = null;
+    let importedShipmentIdCounter = 2;
+    const configStr = rf['Shipments Config'];
+    if (configStr) {
+      try {
+        importedShipments = JSON.parse(configStr);
+        importedShipmentIdCounter = importedShipments.reduce((max, s) => Math.max(max, s.id || 0), 0);
+      } catch(e) {}
+    }
+
+    // Build items array
+    let importedIdCounter = 0;
+    const lineItemRecordIds = {};
+    const importedItems = itemData.records.map(rec => {
+      const f = rec.fields;
+      importedIdCounter++;
+      const itemId = importedIdCounter;
+      lineItemRecordIds[itemId] = rec.id;
+
+      // Parse units by shipment
+      let units = {};
+      const ubsStr = f['Units By Shipment'];
+      if (ubsStr) {
+        try { units = JSON.parse(ubsStr); } catch(e) {}
+      } else {
+        // Fallback: old S1/S2 fields
+        if (f['S1 Units']) units[1] = f['S1 Units'];
+        if (f['S2 Units']) units[2] = f['S2 Units'];
+      }
+
+      const isNew = (f['Type'] || 'Catalog').toLowerCase() === 'new product';
+      return {
+        id: itemId,
+        type: isNew ? 'new' : 'catalog',
+        asin: f['ASIN'] || '',
+        name: f['Product Name'] || '',
+        upc: f['UPC'] || '',
+        fnsku: f['FNSKU'] || '',
+        packQty: f['Pack Qty'] || 1,
+        costPerPiece: f['Cost Per Piece RMB'] || 0,
+        yunDesc: f['Yun Description'] || '',
+        units: units
+      };
+    });
+
+    // Determine exchange rate from first item that has cost data
+    let exRate = null;
+    for (const rec of itemData.records) {
+      const f = rec.fields;
+      if (f['Cost USD'] && f['Cost RMB'] && f['Cost RMB'] > 0) {
+        exRate = f['Cost USD'] / f['Cost RMB'];
+        break;
+      }
+    }
+    if (rf['Exchange Rate']) exRate = rf['Exchange Rate'];
+
+    // Build state
+    const state = {
+      hdrTitle: rf['Title'] || 'REORDER & SHIPMENT PLAN',
+      hdrSubtitle: rf['Subtitle'] || '',
+      hdrDate: rf['Date'] || '',
+      exchangeRate: exRate || liveExchangeRate,
+      shipments: importedShipments || [
+        { id: 1, method: 'AIR', destination: 'FBA (USA)', label: '', description: '' },
+        { id: 2, method: 'SEA', destination: 'AWD (USA)', label: '', description: '' }
+      ],
+      shipmentIdCounter: importedShipmentIdCounter,
+      status: rf['Status'] || 'Draft',
+      summaryNotes: rf['Notes'] || '',
+      items: importedItems,
+      idCounter: importedIdCounter
+    };
+
+    // Save to local storage
+    const reqs = getAllRequests();
+    const id = existing ? existing.id : Date.now().toString();
+
+    if (existing) {
+      const idx = reqs.findIndex(r => r.id === id);
+      reqs[idx].state = state;
+      reqs[idx].airtableRequestRecordId = reqRecord.id;
+      reqs[idx].airtableLineItemRecordIds = lineItemRecordIds;
+      reqs[idx].lastPushedAt = new Date().toISOString();
+    } else {
+      reqs.unshift({
+        id,
+        refId,
+        createdAt: new Date().toISOString(),
+        state,
+        airtableRequestRecordId: reqRecord.id,
+        airtableLineItemRecordIds: lineItemRecordIds,
+        lastPushedAt: new Date().toISOString()
+      });
+    }
+    saveAllRequests(reqs);
+    renderRequestList();
+
+    // Open the imported request in editor
+    openRequest(id);
+  } catch (err) {
+    alert('Import failed: ' + err.message);
+    el.innerHTML = prevHtml;
   }
 }
 </script>

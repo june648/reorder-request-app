@@ -38,12 +38,13 @@ A single-page HTML app for managing re-order requests and shipment plans. Replac
 - Top bar sits outside the `.app` container to span full viewport width
 
 ## App Structure
-- **List Screen**: Shows all saved re-order requests as cards (title, date, item/unit/piece counts). "+ New Request" button to create. Click a card to open it. Delete button per card.
-- **Editor Screen**: Opened when a request is selected. Has Back/Save/Delete buttons and a Status dropdown in a top bar.
+- **List Screen**: Shows all saved re-order requests as cards (title, date, item/unit/piece counts). "+ New Request" button to create. Click a card to open it. Delete button per card (hidden for Approved requests).
+- **Editor Screen**: Opened when a request is selected. Has Back/Save/Delete buttons (Delete hidden when Approved) and a Status dropdown in a top bar.
   - **Data Entry tab**: Shipment config (add/remove shipments, method, destination, description) + item table. Pack Qty is read-only (pulled from Airtable). Exchange rate field in header (editable, with "Fetch Live" button, saved per request).
   - **Sir Ohad View tab**: Formatted view with costs, subtotals, grand total — downloadable as Excel
   - **Supplier View tab**: Formatted view without costs — downloadable as Excel
   - **Summary tab**: Overview cards, shipment breakdown, notes
+- **Load from Airtable**: Fetches requests from Airtable. Only shows requests not yet imported locally (no duplicates). Each card has an "Import" button to pull the full request (shipments, items, units, costs, status, notes) into local editable storage, linked to Airtable record IDs for future push/update. Clicking a card without importing shows a read-only detail view with an "Import to Local & Edit" button. Once imported, the request appears as a normal local card and is hidden from the Airtable list.
 - **Navigation**: Back button returns to list, auto-saves current request. Multiple requests stored in localStorage under `reorder_requests` key (array of {id, refId, createdAt, state, airtableRequestRecordId, airtableLineItemRecordIds, lastPushedAt}).
 
 ## Item Types
@@ -55,6 +56,8 @@ Each item row has a **Type** dropdown (first column):
 ## Reference ID
 - Format: `SCM0000001` — sequential 7-digit zero-padded number
 - Auto-generated on new request creation, assigned retroactively to older requests on open
+- `generateRefId()` checks both local requests AND cached Airtable ref IDs (`knownAirtableRefIds`) to avoid collisions — user must "Load from Airtable" at least once before creating new requests on a fresh origin
+- Duplicate ref IDs in Airtable are auto-detected and fixed during "Load from Airtable" (`fixDuplicateAirtableRefIds`) — newer duplicate records get reassigned to the next available ID, including their line items
 - Displayed as badge on list cards and in editor bar
 - Pushed to Airtable as the key identifier for both request and line item records
 
