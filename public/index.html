@@ -1384,12 +1384,12 @@ async function ensureAirtableTables(pat) {
     // Ensure new fields exist on existing tables (upgrade from v1 schema)
     await ensureFieldExists(pat, requestsTable, 'Shipments Config', { type: 'multilineText' });
     await ensureFieldExists(pat, lineItemsTable, 'Units By Shipment', { type: 'multilineText' });
-    await ensureSelectChoices(pat, requestsTable, 'Status', [
+    const choicesOk = await ensureSelectChoices(pat, requestsTable, 'Status', [
       { name: 'Shipped', color: 'purpleLight2' },
       { name: 'Cancelled', color: 'redLight2' }
     ]);
 
-    const ids = { requestsTableId: requestsTable.id, lineItemsTableId: lineItemsTable.id, fieldsUpgraded: true, statusChoicesV2: true };
+    const ids = { requestsTableId: requestsTable.id, lineItemsTableId: lineItemsTable.id, fieldsUpgraded: true, statusChoicesV2: choicesOk };
     saveTableIds(ids);
     return ids;
   } catch(e) {
@@ -1417,18 +1417,25 @@ async function ensureFieldExists(pat, table, fieldName, fieldDef) {
 async function ensureSelectChoices(pat, table, fieldName, newChoices) {
   const fields = table.fields || [];
   const field = fields.find(f => f.name === fieldName);
-  if (!field) return;
+  if (!field) return true;
   const existing = (field.options && field.options.choices || []).map(c => c.name);
   const toAdd = newChoices.filter(c => !existing.includes(c.name));
-  if (!toAdd.length) return;
+  if (!toAdd.length) return true;
   try {
-    await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${table.id}/fields/${field.id}`, {
+    const resp = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${table.id}/fields/${field.id}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ options: { choices: [...(field.options.choices || []), ...toAdd] } })
     });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      console.warn(`Could not update choices for "${fieldName}":`, err);
+      return false;
+    }
+    return true;
   } catch(e) {
     console.warn(`Could not update choices for "${fieldName}":`, e.message);
+    return false;
   }
 }
 
@@ -1570,7 +1577,7 @@ async function pushToAirtable() {
       const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${tables.requestsTableId}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ records: [{ id: requestRecordId, fields: requestFields }] })
+        body: JSON.stringify({ records: [{ id: requestRecordId, fields: requestFields }], typecast: true })
       });
       if (!resp.ok) {
         const errText = await resp.text();
@@ -1586,7 +1593,7 @@ async function pushToAirtable() {
       const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${tables.requestsTableId}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ records: [{ fields: requestFields }] })
+        body: JSON.stringify({ records: [{ fields: requestFields }], typecast: true })
       });
       if (!resp.ok) { const err = await resp.text(); throw new Error(`Create request failed: ${resp.status} — ${err}`); }
       const data = await resp.json();
@@ -1666,7 +1673,7 @@ async function pushToAirtable() {
       const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${tables.lineItemsTableId}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ records: batch })
+        body: JSON.stringify({ records: batch, typecast: true })
       });
       if (!resp.ok) {
         const errText = await resp.text();
@@ -1691,7 +1698,7 @@ async function pushToAirtable() {
       const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${tables.lineItemsTableId}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ records: batch.map(b => ({ fields: b.fields })) })
+        body: JSON.stringify({ records: batch.map(b => ({ fields: b.fields })), typecast: true })
       });
       if (!resp.ok) throw new Error(`Create line items failed: ${resp.status}`);
       const data = await resp.json();
