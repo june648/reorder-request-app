@@ -62,11 +62,11 @@ Each item row has a **Type** dropdown (first column):
 - Pushed to Airtable as the key identifier for both request and line item records
 
 ## Status
-- Dropdown in editor bar with three values: **Draft** (yellow), **For Approval** (blue), **Approved** (green)
+- Dropdown in editor bar with five values: **Draft** (yellow), **For Approval** (blue), **Approved** (green), **Shipped** (purple), **Cancelled** (red)
 - New requests default to "Draft"
 - Status is persisted in state and shown as a color-coded badge on list cards
 - Pushed to Airtable on every push (both create and update)
-- **Approved requests cannot be deleted** — Delete button is hidden on both list cards and editor bar; status change back from Approved re-enables deletion
+- **Approved and Shipped requests cannot be deleted** — Delete button is hidden on both list cards and editor bar; status change back re-enables deletion
 
 ## Push to Airtable
 - **Manual only** — triggered by explicit "Push to Airtable" button in editor bar
@@ -74,6 +74,7 @@ Each item row has a **Type** dropdown (first column):
 - Subsequent pushes update existing Airtable records (tracked via stored record IDs per request/item)
 - Status is always synced to Airtable on push
 - Deleted items: orphaned Airtable line item records are cleaned up on re-push
+- Stale record IDs: if Airtable records were deleted externally, push auto-detects `ROW_DOES_NOT_EXIST` and re-creates instead of failing
 - Batches writes in groups of 10 (Airtable API limit)
 - "Synced" indicator shown on list cards for pushed requests
 
@@ -101,6 +102,7 @@ Each item row has a **Type** dropdown (first column):
 - When creating Airtable tables via API, the first field in the array becomes the primary field — it must be a text type (not linked records)
 - Airtable table IDs are cached in localStorage (`airtable_reorder_tables`); if tables are deleted in Airtable, clear this key to force re-creation
 - New fields (`Shipments Config`, `Units By Shipment`) are auto-added to existing Airtable tables on first push after upgrade (via `ensureFieldExists`); cached with `fieldsUpgraded` flag
+- Push auto-recovers from deleted Airtable records: if a request or line item record was deleted in Airtable but the local app still holds its record ID, the push detects the `ROW_DOES_NOT_EXIST` 422 error and re-creates the record instead of failing
 
 ## Reference Samples
 - Sir Ohad format: `C:\Users\User\Downloads\Sir Ohad View.xlsx`

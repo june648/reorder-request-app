@@ -190,11 +190,15 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
 .rc-status.draft{background:#fef3cd;color:#856404}
 .rc-status.for-approval{background:#d1ecf1;color:#0c5460}
 .rc-status.approved{background:#d4edda;color:#155724}
+.rc-status.shipped{background:#e8daef;color:#6c3483}
+.rc-status.cancelled{background:#fadbd8;color:#922b21}
 .status-select{border:1px solid #d0d5dd;border-radius:6px;padding:5px 10px;font-size:13px;font-weight:600;font-family:inherit;outline:none;cursor:pointer;transition:border .15s}
 .status-select:focus{border-color:#4a7cff}
 .status-select.draft{background:#fef3cd;color:#856404}
 .status-select.for-approval{background:#d1ecf1;color:#0c5460}
 .status-select.approved{background:#d4edda;color:#155724}
+.status-select.shipped{background:#e8daef;color:#6c3483}
+.status-select.cancelled{background:#fadbd8;color:#922b21}
 .at-section-title{font-size:14px;font-weight:700;color:#27ae60;margin-bottom:8px;display:flex;align-items:center;gap:8px}
 .at-card{background:#fff;border-radius:10px;padding:16px 22px;box-shadow:0 1px 4px rgba(0,0,0,.08);border:1px solid #d4edda;margin-bottom:8px;cursor:pointer;transition:box-shadow .15s;display:flex;align-items:center;gap:16px}
 .at-card:hover{box-shadow:0 3px 12px rgba(0,0,0,.12)}
@@ -268,6 +272,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
       <option value="Draft">Draft</option>
       <option value="For Approval">For Approval</option>
       <option value="Approved">Approved</option>
+      <option value="Shipped">Shipped</option>
+      <option value="Cancelled">Cancelled</option>
     </select>
     <button class="save-btn" onclick="saveCurrentRequest()">Save</button>
     <button class="push-btn" onclick="pushToAirtable()">&#8593; Push to Airtable</button>
@@ -565,7 +571,7 @@ function renderRequestList() {
         <div class="stat"><div class="sv">${fmtN(totalPieces)}</div>pieces</div>
       </div>
       <div class="rc-date">${esc(date)}</div>
-      ${(s.status || 'Draft') === 'Approved' ? '' : `<button class="rc-del" onclick="event.stopPropagation();deleteRequest('${r.id}')">Delete</button>`}
+      ${['Approved','Shipped'].includes(s.status || 'Draft') ? '' : `<button class="rc-del" onclick="event.stopPropagation();deleteRequest('${r.id}')">Delete</button>`}
     </div>`;
   }).join('');
 }
@@ -626,7 +632,7 @@ function autoSaveCurrentRequest() {
 
 function deleteCurrentRequest() {
   const cur = getAllRequests().find(r => r.id === currentRequestId);
-  if (cur && (cur.state?.status || 'Draft') === 'Approved') { alert('Approved requests cannot be deleted.'); return; }
+  if (cur && ['Approved','Shipped'].includes(cur.state?.status || 'Draft')) { alert('Approved/Shipped requests cannot be deleted.'); return; }
   if (!confirm('Delete this re-order request? This cannot be undone.')) return;
   const reqs = getAllRequests().filter(r => r.id !== currentRequestId);
   saveAllRequests(reqs);
@@ -641,7 +647,7 @@ function deleteCurrentRequest() {
 
 function deleteRequest(id) {
   const req = getAllRequests().find(r => r.id === id);
-  if (req && (req.state?.status || 'Draft') === 'Approved') { alert('Approved requests cannot be deleted.'); return; }
+  if (req && ['Approved','Shipped'].includes(req.state?.status || 'Draft')) { alert('Approved/Shipped requests cannot be deleted.'); return; }
   if (!confirm('Delete this re-order request?')) return;
   const reqs = getAllRequests().filter(r => r.id !== id);
   saveAllRequests(reqs);
@@ -659,7 +665,7 @@ function updateEditorBar() {
 function onStatusChange() {
   const sel = document.getElementById('statusSelect');
   sel.className = 'status-select ' + statusClass(sel.value);
-  document.querySelector('.del-btn-top').style.display = sel.value === 'Approved' ? 'none' : '';
+  document.querySelector('.del-btn-top').style.display = (sel.value === 'Approved' || sel.value === 'Shipped') ? 'none' : '';
 }
 function statusClass(v) { return v === 'For Approval' ? 'for-approval' : v.toLowerCase(); }
 
@@ -1428,7 +1434,9 @@ async function createRequestsTable(pat) {
       { name: 'Status', type: 'singleSelect', options: { choices: [
         { name: 'Draft', color: 'yellowLight2' },
         { name: 'For Approval', color: 'blueLight2' },
-        { name: 'Approved', color: 'greenLight2' }
+        { name: 'Approved', color: 'greenLight2' },
+        { name: 'Shipped', color: 'purpleLight2' },
+        { name: 'Cancelled', color: 'redLight2' }
       ]}},
       { name: 'Notes', type: 'multilineText' }
     ]
@@ -1542,8 +1550,17 @@ async function pushToAirtable() {
         headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ records: [{ id: requestRecordId, fields: requestFields }] })
       });
-      if (!resp.ok) { const err = await resp.text(); throw new Error(`Update request failed: ${resp.status} — ${err}`); }
-    } else {
+      if (!resp.ok) {
+        const errText = await resp.text();
+        // If record was deleted in Airtable, clear ID and create fresh
+        if (resp.status === 422 && errText.includes('ROW_DOES_NOT_EXIST')) {
+          requestRecordId = null;
+        } else {
+          throw new Error(`Update request failed: ${resp.status} — ${errText}`);
+        }
+      }
+    }
+    if (!requestRecordId) {
       const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${tables.requestsTableId}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
@@ -1552,6 +1569,9 @@ async function pushToAirtable() {
       if (!resp.ok) { const err = await resp.text(); throw new Error(`Create request failed: ${resp.status} — ${err}`); }
       const data = await resp.json();
       requestRecordId = data.records[0].id;
+      // Clear all line item record IDs since the old parent is gone
+      req.airtableLineItemRecordIds = {};
+      items.forEach(item => { delete item.airtableRecordId; });
     }
     req.airtableRequestRecordId = requestRecordId;
 
@@ -1618,7 +1638,7 @@ async function pushToAirtable() {
       }
     });
 
-    // Update existing line items (batches of 10)
+    // Update existing line items (batches of 10), re-create if deleted in Airtable
     for (let i = 0; i < toUpdate.length; i += 10) {
       const batch = toUpdate.slice(i, i + 10);
       const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${tables.lineItemsTableId}`, {
@@ -1626,7 +1646,21 @@ async function pushToAirtable() {
         headers: { Authorization: `Bearer ${pat}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ records: batch })
       });
-      if (!resp.ok) throw new Error(`Update line items failed: ${resp.status}`);
+      if (!resp.ok) {
+        const errText = await resp.text();
+        if (resp.status === 422 && errText.includes('ROW_DOES_NOT_EXIST')) {
+          // Move all items from this batch to create list
+          batch.forEach(rec => {
+            const item = items.find(it => it.airtableRecordId === rec.id || previousItemRecordIds[String(it.id)] === rec.id);
+            if (item) {
+              delete item.airtableRecordId;
+              toCreate.push({ itemId: item.id, fields: rec.fields });
+            }
+          });
+        } else {
+          throw new Error(`Update line items failed: ${resp.status}`);
+        }
+      }
     }
 
     // Create new line items (batches of 10)
@@ -1805,7 +1839,7 @@ async function loadFromAirtable() {
       const totalItems = f['Total Items'] || 0;
       const totalUnits = f['Total Units'] || 0;
       const totalPieces = f['Total Pieces'] || 0;
-      const statusColor = status === 'Approved' ? '#27ae60' : status === 'For Approval' ? '#0c5460' : '#856404';
+      const statusColor = status === 'Approved' ? '#27ae60' : status === 'For Approval' ? '#0c5460' : status === 'Shipped' ? '#6c3483' : status === 'Cancelled' ? '#922b21' : '#856404';
       return `<div class="at-card" onclick="viewAirtableRequest('${refId}','${esc(title)}','${esc(subtitle)}','${date}','${status}')">
         <div class="at-info">
           <div class="at-title"><span class="at-badge">${esc(refId)}</span>${esc(subtitle || title)}
