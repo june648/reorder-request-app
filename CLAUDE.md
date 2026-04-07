@@ -38,8 +38,8 @@ A single-page HTML app for managing re-order requests and shipment plans. Replac
 - Top bar sits outside the `.app` container to span full viewport width
 
 ## App Structure
-- **List Screen**: Shows all saved re-order requests as cards (title, date, item/unit/piece counts). "+ New Request" button to create. Click a card to open it. Delete button per card (hidden for Approved requests).
-- **Editor Screen**: Opened when a request is selected. Has Back/Save/Delete buttons (Delete hidden when Approved) and a Status dropdown in a top bar.
+- **List Screen**: Shows all saved re-order requests as cards (title, date, item/unit/piece counts). "+ New Request" button to create. Click a card to open it. Delete button per card (hidden for Approved/Shipped requests).
+- **Editor Screen**: Opened when a request is selected. Has Back/Save/Delete buttons (Delete hidden when Approved/Shipped) and a Status dropdown in a top bar.
   - **Data Entry tab**: Shipment config (add/remove shipments, method, destination, description) + item table. Pack Qty is read-only (pulled from Airtable). Exchange rate field in header (editable, with "Fetch Live" button, saved per request).
   - **Sir Ohad View tab**: Formatted view with costs, subtotals, grand total — downloadable as Excel
   - **Supplier View tab**: Formatted view without costs — downloadable as Excel
@@ -102,6 +102,8 @@ Each item row has a **Type** dropdown (first column):
 - When creating Airtable tables via API, the first field in the array becomes the primary field — it must be a text type (not linked records)
 - Airtable table IDs are cached in localStorage (`airtable_reorder_tables`); if tables are deleted in Airtable, clear this key to force re-creation
 - New fields (`Shipments Config`, `Units By Shipment`) are auto-added to existing Airtable tables on first push after upgrade (via `ensureFieldExists`); cached with `fieldsUpgraded` flag
+- All record create/update calls use `typecast: true` so Airtable auto-creates new singleSelect options (e.g., Shipped, Cancelled) without needing schema write permissions
+- New select choices (Shipped, Cancelled) are also added via `ensureSelectChoices()` PATCH when schema write is available; cached with `statusChoicesV2` flag
 - Push auto-recovers from deleted Airtable records: if a request or line item record was deleted in Airtable but the local app still holds its record ID, the push detects the `ROW_DOES_NOT_EXIST` 422 error and re-creates the record instead of failing
 
 ## Reference Samples
