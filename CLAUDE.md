@@ -38,7 +38,7 @@ A single-page HTML app for managing re-order requests and shipment plans. Replac
 - Top bar sits outside the `.app` container to span full viewport width
 
 ## App Structure
-- **List Screen**: Shows all saved re-order requests as cards (title, date, item/unit/piece counts). "+ New Request" button to create. Click a card to open it. Delete button per card (hidden for Approved/Shipped requests).
+- **List Screen**: Shows all saved re-order requests as cards (title, date, item/unit/piece counts). "+ New Request" button to create. Click a card to open it. Delete button per card (hidden for Approved/Shipped requests). Below the request list is an **ASIN Summary** section (collapsible, blue header) aggregating every item across all local requests — columns: ASIN, Description, Qty (Units), Request ID, Status. Supports text filter, status dropdown filter, and sortable columns (default sort by status). Click a row to jump into that request.
 - **Editor Screen**: Opened when a request is selected. Has Back/Save/Delete buttons (Delete hidden when Approved/Shipped) and a Status dropdown in a top bar.
   - **Data Entry tab**: Shipment config (add/remove shipments, method, destination, description) + item table. Pack Qty is read-only (pulled from Airtable). Exchange rate field in header (editable, with "Fetch Live" button, saved per request).
   - **Sir Ohad View tab**: Formatted view with costs, subtotals, grand total — downloadable as Excel
