@@ -42,6 +42,29 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f6f
 .request-card .rc-del:hover{opacity:1}
 .empty-state{text-align:center;padding:60px 20px;color:#999;font-size:15px}
 
+/* ASIN Summary */
+.asin-summary{background:#fff;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:16px;border:1px solid #e8eaef;overflow:hidden}
+.asin-summary-head{background:#3a5bc7;color:#fff;padding:12px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+.asin-summary-head h3{font-size:14px;font-weight:700;letter-spacing:.3px}
+.asin-summary-head .count-badge{background:rgba(255,255,255,.25);color:#fff;font-size:11px;font-weight:700;padding:2px 10px;border-radius:10px}
+.asin-summary-head .toggle-arrow{margin-left:auto;font-size:14px;transition:transform .2s}
+.asin-summary.collapsed .toggle-arrow{transform:rotate(-90deg)}
+.asin-summary.collapsed .asin-summary-body{display:none}
+.asin-summary-body{padding:14px 18px}
+.asin-summary-filter{display:flex;gap:10px;margin-bottom:10px;align-items:center}
+.asin-summary-filter input{flex:1;padding:8px 12px;border:1px solid #d5d9e0;border-radius:6px;font-size:13px;font-family:inherit}
+.asin-summary-filter select{padding:8px 10px;border:1px solid #d5d9e0;border-radius:6px;font-size:13px;background:#fff;font-family:inherit}
+.asin-summary-table{width:100%;border-collapse:collapse;font-size:13px}
+.asin-summary-table th{background:#f5f6fa;text-align:left;padding:10px 12px;font-weight:700;font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #e8eaef;cursor:pointer;user-select:none}
+.asin-summary-table th:hover{background:#eceff5}
+.asin-summary-table th .sort-ind{font-size:10px;color:#999;margin-left:4px}
+.asin-summary-table td{padding:10px 12px;border-bottom:1px solid #f0f2f5}
+.asin-summary-table tr:hover td{background:#fafbfd;cursor:pointer}
+.asin-summary-table .asin-cell{font-family:'Courier New',monospace;font-weight:600;color:#333}
+.asin-summary-table .qty-cell{text-align:right;font-weight:700;color:#3a5bc7}
+.asin-summary-table .refid-cell .ref-badge{margin-right:0}
+.asin-summary-empty{text-align:center;padding:24px;color:#999;font-size:13px}
+
 /* Editor Top Row */
 .editor-bar{background:#fff;border-radius:10px;padding:14px 22px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .editor-bar .back-btn,.editor-bar .save-btn,.editor-bar .del-btn-top{border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}
@@ -255,6 +278,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   </div>
   <div id="airtableRequests" style="margin-bottom:16px"></div>
   <div class="request-list" id="requestList"></div>
+  <div id="asinSummary" style="margin-top:24px"></div>
 </div>
 
 <!-- ======== EDITOR SCREEN ======== -->
@@ -546,7 +570,112 @@ function getItemTotalUnits(item) {
   return (item.s1Units || 0) + (item.s2Units || 0);
 }
 
+const ASIN_SUMMARY_STATE = { filter: '', statusFilter: 'all', sortKey: 'status', sortDir: 'asc', collapsed: false };
+const STATUS_ORDER = { 'Draft':1, 'For Approval':2, 'Approved':3, 'Shipped':4, 'Cancelled':5 };
+
+function buildAsinSummaryRows() {
+  const reqs = getAllRequests();
+  const rows = [];
+  reqs.forEach(r => {
+    const s = r.state || {};
+    const status = s.status || 'Draft';
+    (s.items || []).forEach(it => {
+      const units = getItemTotalUnits(it);
+      if (!it.asin && !it.name) return;
+      rows.push({
+        asin: it.asin || '—',
+        description: it.name || it.yunDesc || '',
+        qty: units,
+        pieces: units * (it.packQty || 1),
+        refId: r.refId || '—',
+        requestId: r.id,
+        requestTitle: s.hdrSubtitle || s.hdrTitle || 'Untitled',
+        status
+      });
+    });
+  });
+  return rows;
+}
+
+function renderAsinSummary() {
+  const el = document.getElementById('asinSummary');
+  if (!el) return;
+  const rows = buildAsinSummaryRows();
+  if (rows.length === 0) { el.innerHTML = ''; return; }
+
+  const st = ASIN_SUMMARY_STATE;
+  const q = st.filter.trim().toLowerCase();
+  let filtered = rows.filter(r => {
+    if (st.statusFilter !== 'all' && r.status !== st.statusFilter) return false;
+    if (!q) return true;
+    return r.asin.toLowerCase().includes(q) || r.description.toLowerCase().includes(q) || r.refId.toLowerCase().includes(q) || r.requestTitle.toLowerCase().includes(q);
+  });
+
+  const dir = st.sortDir === 'asc' ? 1 : -1;
+  filtered.sort((a,b) => {
+    let av, bv;
+    if (st.sortKey === 'status') { av = STATUS_ORDER[a.status]||99; bv = STATUS_ORDER[b.status]||99; }
+    else if (st.sortKey === 'qty') { av = a.qty; bv = b.qty; }
+    else { av = (a[st.sortKey]||'').toString().toLowerCase(); bv = (b[st.sortKey]||'').toString().toLowerCase(); }
+    if (av < bv) return -1*dir;
+    if (av > bv) return 1*dir;
+    return 0;
+  });
+
+  const ind = (k) => st.sortKey === k ? (st.sortDir === 'asc' ? '▲' : '▼') : '';
+  const statuses = ['all','Draft','For Approval','Approved','Shipped','Cancelled'];
+
+  el.innerHTML = `<div class="asin-summary${st.collapsed?' collapsed':''}">
+    <div class="asin-summary-head" onclick="toggleAsinSummary()">
+      <h3>ASIN Summary</h3>
+      <span class="count-badge">${rows.length} items</span>
+      <span class="toggle-arrow">▼</span>
+    </div>
+    <div class="asin-summary-body">
+      <div class="asin-summary-filter">
+        <input type="text" id="asinSummaryFilter" placeholder="Filter by ASIN, description, request ID, title..." value="${esc(st.filter)}" oninput="onAsinSummaryFilter(this.value)">
+        <select onchange="onAsinSummaryStatusFilter(this.value)">
+          ${statuses.map(s => `<option value="${esc(s)}"${s===st.statusFilter?' selected':''}>${s==='all'?'All statuses':esc(s)}</option>`).join('')}
+        </select>
+      </div>
+      ${filtered.length === 0 ? '<div class="asin-summary-empty">No matching items.</div>' : `
+      <table class="asin-summary-table">
+        <thead><tr>
+          <th onclick="sortAsinSummary('asin')">ASIN <span class="sort-ind">${ind('asin')}</span></th>
+          <th onclick="sortAsinSummary('description')">Description <span class="sort-ind">${ind('description')}</span></th>
+          <th onclick="sortAsinSummary('qty')">Qty (Units) <span class="sort-ind">${ind('qty')}</span></th>
+          <th onclick="sortAsinSummary('refId')">Request ID <span class="sort-ind">${ind('refId')}</span></th>
+          <th onclick="sortAsinSummary('status')">Status <span class="sort-ind">${ind('status')}</span></th>
+        </tr></thead>
+        <tbody>${filtered.map(r => `
+          <tr onclick="openRequest('${r.requestId}')" title="${esc(r.requestTitle)}">
+            <td class="asin-cell">${esc(r.asin)}</td>
+            <td>${esc(r.description)}</td>
+            <td class="qty-cell">${fmtN(r.qty)}</td>
+            <td class="refid-cell"><span class="ref-badge">${esc(r.refId)}</span></td>
+            <td><span class="rc-status ${statusClass(r.status)}">${esc(r.status)}</span></td>
+          </tr>`).join('')}</tbody>
+      </table>`}
+    </div>
+  </div>`;
+}
+
+function toggleAsinSummary() { ASIN_SUMMARY_STATE.collapsed = !ASIN_SUMMARY_STATE.collapsed; renderAsinSummary(); }
+function onAsinSummaryFilter(v) {
+  ASIN_SUMMARY_STATE.filter = v;
+  renderAsinSummary();
+  const inp = document.getElementById('asinSummaryFilter');
+  if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+}
+function onAsinSummaryStatusFilter(v) { ASIN_SUMMARY_STATE.statusFilter = v; renderAsinSummary(); }
+function sortAsinSummary(k) {
+  if (ASIN_SUMMARY_STATE.sortKey === k) ASIN_SUMMARY_STATE.sortDir = ASIN_SUMMARY_STATE.sortDir === 'asc' ? 'desc' : 'asc';
+  else { ASIN_SUMMARY_STATE.sortKey = k; ASIN_SUMMARY_STATE.sortDir = 'asc'; }
+  renderAsinSummary();
+}
+
 function renderRequestList() {
+  renderAsinSummary();
   const reqs = getAllRequests();
   const el = document.getElementById('requestList');
   if (reqs.length === 0) {
