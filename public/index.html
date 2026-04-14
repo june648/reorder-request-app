@@ -436,6 +436,7 @@ let shipmentIdCounter = 0;
 let liveExchangeRate = 0.1381;
 let currentRequestId = null;
 let knownAirtableRefIds = [];
+let airtableItemsCache = []; // [{asin, description, qty, refId, status, source:'airtable'}]
 let currentRefId = null;
 
 // ── Init ──
@@ -576,9 +577,11 @@ const STATUS_ORDER = { 'Draft':1, 'For Approval':2, 'Approved':3, 'Shipped':4, '
 function buildAsinSummaryRows() {
   const reqs = getAllRequests();
   const rows = [];
+  const localRefIds = new Set();
   reqs.forEach(r => {
     const s = r.state || {};
     const status = s.status || 'Draft';
+    if (r.refId) localRefIds.add(r.refId);
     (s.items || []).forEach(it => {
       const units = getItemTotalUnits(it);
       if (!it.asin && !it.name) return;
@@ -590,8 +593,24 @@ function buildAsinSummaryRows() {
         refId: r.refId || '—',
         requestId: r.id,
         requestTitle: s.hdrSubtitle || s.hdrTitle || 'Untitled',
-        status
+        status,
+        source: 'local'
       });
+    });
+  });
+  // Merge Airtable-only items (not yet imported locally)
+  airtableItemsCache.forEach(it => {
+    if (localRefIds.has(it.refId)) return;
+    rows.push({
+      asin: it.asin,
+      description: it.description,
+      qty: it.qty,
+      pieces: 0,
+      refId: it.refId,
+      requestId: null,
+      requestTitle: '',
+      status: it.status,
+      source: 'airtable'
     });
   });
   return rows;
@@ -648,9 +667,9 @@ function renderAsinSummary() {
           <th onclick="sortAsinSummary('status')">Status <span class="sort-ind">${ind('status')}</span></th>
         </tr></thead>
         <tbody>${filtered.map(r => `
-          <tr onclick="openRequest('${r.requestId}')" title="${esc(r.requestTitle)}">
+          <tr ${r.source === 'local' ? `onclick="openRequest('${r.requestId}')"` : ''} title="${esc(r.requestTitle || (r.source === 'airtable' ? 'Airtable only — not yet imported' : ''))}" style="${r.source === 'airtable' ? 'cursor:default' : ''}">
             <td class="asin-cell">${esc(r.asin)}</td>
-            <td>${esc(r.description)}</td>
+            <td>${esc(r.description)}${r.source === 'airtable' ? ' <span style="font-size:10px;background:#d1ecf1;color:#0c5460;padding:1px 6px;border-radius:8px;margin-left:4px;font-weight:600">AIRTABLE</span>' : ''}</td>
             <td class="qty-cell">${fmtN(r.qty)}</td>
             <td class="refid-cell"><span class="ref-badge">${esc(r.refId)}</span></td>
             <td><span class="rc-status ${statusClass(r.status)}">${esc(r.status)}</span></td>
@@ -1976,11 +1995,46 @@ async function loadFromAirtable() {
     // Re-read after fix
     knownAirtableRefIds = requests.map(r => r.fields['Reference ID']).filter(Boolean);
 
+    // Build status lookup by refId for the items cache
+    const statusByRefId = {};
+    requests.forEach(r => { if (r.fields['Reference ID']) statusByRefId[r.fields['Reference ID']] = r.fields['Status'] || 'Draft'; });
+
+    // Fetch all line items for ASIN Summary (handles pagination)
+    airtableItemsCache = [];
+    try {
+      let offset = '';
+      do {
+        const liParams = new URLSearchParams();
+        liParams.set('pageSize', '100');
+        if (offset) liParams.set('offset', offset);
+        const liResp = await fetch(`https://api.airtable.com/v0/${AT_BASE}/Reorder%20Line%20Items?${liParams.toString()}`, {
+          headers: { Authorization: `Bearer ${pat}` }
+        });
+        if (!liResp.ok) break;
+        const liData = await liResp.json();
+        liData.records.forEach(rec => {
+          const f = rec.fields;
+          const refId = f['Reference ID'] || '';
+          const parentRef = refId.split('-')[0] || refId;
+          airtableItemsCache.push({
+            asin: f['ASIN'] || '—',
+            description: f['Product Name'] || f['Yun Description'] || '',
+            qty: f['Total Units'] || 0,
+            refId: parentRef,
+            status: statusByRefId[parentRef] || 'Draft',
+            source: 'airtable'
+          });
+        });
+        offset = liData.offset || '';
+      } while (offset);
+    } catch (e) { /* ignore cache failure */ }
+
     const localRefIds = new Set(getAllRequests().map(lr => lr.refId).filter(Boolean));
     const remoteOnly = requests.filter(r => !localRefIds.has(r.fields['Reference ID']));
 
     if (remoteOnly.length === 0) {
       el.innerHTML = '<div style="text-align:center;color:#888;padding:20px;font-size:13px">All Airtable requests are already imported locally.</div>';
+      renderAsinSummary();
       return;
     }
 
@@ -2014,6 +2068,7 @@ async function loadFromAirtable() {
         <button class="at-import-btn" onclick="event.stopPropagation();importFromAirtable('${refId}')">&#8615; Import</button>
       </div>`;
     }).join('');
+    renderAsinSummary();
   } catch (err) {
     el.innerHTML = `<div style="color:#d9363e;padding:12px">Error loading from Airtable: ${err.message}</div>`;
   }
