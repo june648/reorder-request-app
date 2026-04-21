@@ -44,7 +44,7 @@ A single-page HTML app for managing re-order requests and shipment plans. Replac
   - **Sir Ohad View tab**: Formatted view with costs, subtotals, grand total — downloadable as Excel
   - **Supplier View tab**: Formatted view without costs — downloadable as Excel
   - **Summary tab**: Overview cards, shipment breakdown, notes
-- **Load from Airtable**: Fetches requests from Airtable. Only shows requests not yet imported locally (no duplicates). Each card has an "Import" button to pull the full request (shipments, items, units, costs, status, notes) into local editable storage, linked to Airtable record IDs for future push/update. Clicking a card without importing shows a read-only detail view with an "Import to Local & Edit" button. Once imported, the request appears as a normal local card and is hidden from the Airtable list.
+- **Load from Airtable**: Fetches requests from Airtable. Auto-syncs already-imported requests silently (overwrites local state with latest Airtable data, preserving linked record IDs) — so changes pushed from another device propagate on the next Load. Shows a "synced N existing" count and lists only the not-yet-imported remote requests with "Import" buttons. Clicking an un-imported card shows a read-only detail view with an "Import to Local & Edit" button. Once imported, the request appears as a normal local card. Shared helper `buildStateFromAirtable(reqRecord, itemRecords)` powers both import and silent sync.
 - **Navigation**: Back button returns to list, auto-saves current request. Multiple requests stored in localStorage under `reorder_requests` key (array of {id, refId, createdAt, state, airtableRequestRecordId, airtableLineItemRecordIds, lastPushedAt}).
 
 ## Item Types
