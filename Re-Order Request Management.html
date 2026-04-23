@@ -123,6 +123,9 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f6f
 .data-entry-table .asin-col{width:130px}
 .data-entry-table .name-col{width:180px}
 .data-entry-table .narrow{width:70px}
+.upc-lookup-btn{background:#3a5bc7;color:#fff;border:none;border-radius:4px;padding:4px 8px;font-size:11px;font-weight:600;cursor:pointer;margin-top:3px;width:100%}
+.upc-lookup-btn:hover{background:#2d4aa8}
+.upc-lookup-btn:disabled{background:#aaa;cursor:not-allowed}
 .data-entry-table .med{width:90px}
 .data-entry-table .cost-col{width:100px}
 .data-entry-table .ship-col{text-align:center}
@@ -206,7 +209,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f6f
 .modal .modal-btns button{padding:8px 18px;border-radius:6px;border:none;font-size:13px;font-weight:600;cursor:pointer}
 .modal .modal-btns .cancel-btn{background:#f0f2f5;color:#444}
 .modal .modal-btns .save-btn{background:#4a7cff;color:#fff}
-.lookup-status{font-size:11px;margin-left:4px}
+.lookup-status{font-size:10px;display:block;margin-top:2px;white-space:nowrap;line-height:1.2;font-weight:600}
 .lookup-status.ok{color:#27ae60}
 .lookup-status.err{color:#d9363e}
 .lookup-status.loading{color:#e6a817}
@@ -892,6 +895,59 @@ async function lookupASIN(asin, rowId) {
     setLookupStatus(rowId, 'Network error', 'err');
   }
 }
+
+function triggerUpcLookup(rowId) {
+  const inp = document.querySelector(`input[data-field="upc"][data-id="${rowId}"]`);
+  const val = inp ? inp.value.trim() : '';
+  console.log('[UPC Lookup] Button clicked, rowId=', rowId, 'value=', val);
+  const item = items.find(i => i.id === rowId);
+  if (item) item.upc = val;
+  if (!val) { setLookupStatus(rowId, 'Enter a UPC first', 'err'); return; }
+  lookupUPC(val, rowId);
+}
+
+async function lookupUPC(upc, rowId) {
+  console.log('[UPC Lookup] lookupUPC called with upc=', upc, 'rowId=', rowId);
+  const pat = localStorage.getItem('airtable_pat');
+  if (!pat) { setLookupStatus(rowId, 'No API token — configure in Settings', 'err'); return; }
+  if (!upc || upc.length < 4) { setLookupStatus(rowId, 'UPC too short', 'err'); return; }
+  setLookupStatus(rowId, 'Looking up UPC...', 'loading');
+  try {
+    // Match UPC whether stored as text or number, and try common leading-zero variants
+    const formula = `OR({UPC}&""="${upc}", {UPC}&""="0${upc}", {UPC}&""="00${upc}", FIND("${upc}", {UPC}&"")>0)`;
+    const url = `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=${encodeURIComponent(formula)}&fields%5B%5D=${FIELD_IDS.asin}&fields%5B%5D=${FIELD_IDS.name}&fields%5B%5D=${FIELD_IDS.upc}&fields%5B%5D=${FIELD_IDS.packQty}&fields%5B%5D=${FIELD_IDS.masterSku}&fields%5B%5D=${FIELD_IDS.costRmb}&fields%5B%5D=${FIELD_IDS.yunDesc}`;
+    console.log('[UPC Lookup] Formula:', formula);
+    console.log('[UPC Lookup] URL:', url);
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${pat}` } });
+    console.log('[UPC Lookup] Response status:', resp.status);
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.log('[UPC Lookup] Error body:', errText);
+      setLookupStatus(rowId, `API error ${resp.status}`, 'err');
+      return;
+    }
+    const data = await resp.json();
+    console.log('[UPC Lookup] Records found:', data.records ? data.records.length : 0, data);
+    if (!data.records || data.records.length === 0) { setLookupStatus(rowId, 'UPC not found in catalog', 'err'); return; }
+    const f = data.records[0].fields;
+    console.log('[UPC Lookup] Matched record fields:', f);
+    const item = items.find(i => i.id === rowId);
+    if (!item) return;
+    item.name = f['Product Name'] || '';
+    item.fnsku = f['Master SKU'] || '';
+    item.packQty = Number(f['Pack Quantity']) || 1;
+    item.costPerPiece = Number(f['Per Piece Cost (RMB)']) || 0;
+    item.yunDesc = f['Yun Description'] || '';
+    renderItems();
+    refreshViews();
+    setLookupStatus(rowId, 'Found in catalog', 'ok');
+    autoSaveCurrentRequest();
+  } catch (e) {
+    console.error('[UPC Lookup] Exception:', e);
+    setLookupStatus(rowId, 'Network error', 'err');
+  }
+}
+
 function setLookupStatus(rowId, msg, cls) {
   const el = document.querySelector(`[data-status="${rowId}"]`);
   if (el) { el.textContent = msg; el.className = 'lookup-status ' + cls; }
@@ -993,9 +1049,9 @@ function renderItems() {
 
     let rowHtml = `
       <td class="type-col"><select data-field="type" data-id="${item.id}"><option value="catalog"${item.type!=='new'?' selected':''}>Catalog</option><option value="new"${item.type==='new'?' selected':''}>New Product</option></select></td>
-      <td class="asin-col">${isNew ? '<input value="" data-field="asin" data-id="'+item.id+'" disabled style="background:#eee;color:#999" placeholder="N/A">' : '<input value="'+esc(item.asin)+'" data-field="asin" data-id="'+item.id+'" placeholder="B0...">'}<span class="lookup-status" data-status="${item.id}"></span></td>
+      <td class="asin-col">${isNew ? '<input value="" data-field="asin" data-id="'+item.id+'" disabled style="background:#eee;color:#999" placeholder="N/A">' : '<input value="'+esc(item.asin)+'" data-field="asin" data-id="'+item.id+'" placeholder="B0...">'}${isNew ? '' : `<span class="lookup-status" data-status="${item.id}"></span>`}</td>
       <td class="name-col"><input value="${esc(item.name)}" data-field="name" data-id="${item.id}" ${isNew ? '' : 'class="readonly" readonly'}></td>
-      <td class="narrow"><input value="${esc(item.upc)}" data-field="upc" data-id="${item.id}" ${isNew ? '' : 'class="readonly" readonly'}></td>
+      <td class="narrow"><input value="${esc(item.upc)}" data-field="upc" data-id="${item.id}" ${isNew ? 'placeholder="Enter UPC"' : 'class="readonly" readonly'}>${isNew ? `<button class="upc-lookup-btn" onclick="triggerUpcLookup(${item.id})">🔍 Lookup</button><span class="lookup-status" data-status="${item.id}"></span>` : ''}</td>
       <td class="med"><input value="${esc(item.fnsku)}" data-field="fnsku" data-id="${item.id}" ${isNew ? '' : 'class="readonly" readonly'}></td>
       <td class="narrow"><input type="number" value="${item.packQty}" data-field="packQty" data-id="${item.id}" min="1" ${isNew ? '' : 'class="readonly" readonly'}></td>
       <td class="cost-col"><input type="number" step="0.01" value="${item.costPerPiece}" data-field="costPerPiece" data-id="${item.id}"></td>`;
@@ -1048,6 +1104,7 @@ function renderItems() {
         item[field] = inp.value;
       }
       if (field === 'asin' && item.type !== 'new') lookupASIN(inp.value.trim(), id);
+      if (field === 'upc' && item.type === 'new') lookupUPC(inp.value.trim(), id);
       renderItems();
       refreshViews();
       autoSaveCurrentRequest();
@@ -1061,6 +1118,18 @@ function renderItems() {
         if (item) item.asin = val;
         if (item && item.type !== 'new') {
           debounce = setTimeout(() => { if (val.length >= 5) lookupASIN(val, id); }, 600);
+        }
+      });
+    }
+    if (field === 'upc') {
+      let debounceUpc;
+      inp.addEventListener('input', () => {
+        clearTimeout(debounceUpc);
+        const val = inp.value.trim();
+        const item = items.find(i => i.id === id);
+        if (item) item.upc = val;
+        if (item && item.type === 'new') {
+          debounceUpc = setTimeout(() => { if (val.length >= 4) lookupUPC(val, id); }, 600);
         }
       });
     }
