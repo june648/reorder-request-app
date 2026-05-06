@@ -2,7 +2,7 @@
 
 ## Overview
 A single-page HTML app for managing re-order requests and shipment plans. Replaces manual Excel creation for two audiences:
-- **Sir Ohad View**: Internal view with ASIN, Product, Units, Pieces, Cost RMB, Est. Cost USD
+- **Sir Ohad View**: Internal view with ASIN, Product, Units, Pieces, Masterbox, Cost RMB, Est. Cost USD
 - **Supplier View**: External view with FN SKU (=ASIN), UPC, SKU (=Master SKU), Product Description (from Yun Description), Units, Pieces (no costs)
 
 ## Location
@@ -25,10 +25,11 @@ A single-page HTML app for managing re-order requests and shipment plans. Replac
     - `Master SKU` / FNSKU (fldYoqEElKrjS3S7t)
     - `Per Piece Cost (RMB)` (fldSc8CgYfqydf9Vf)
     - `Yun Description` (fldffzSXF7Tsjs8xD)
+    - `Masterbox Quantity` (units per masterbox; used to compute total masterboxes in Sir Ohad view)
 - **Reorder Requests Table** (auto-created on first push) — master request records
   - Fields: Reference ID, Title, Subtitle, Date, Shipments Config (JSON), S1/S2 Method/Destination/Description (backward compat), S1–S10 Name (shipment labels), Total Items/Units/Pieces, Total Cost RMB/USD, Exchange Rate, Status (Draft/For Approval/Approved), Notes
 - **Reorder Line Items Table** (auto-created on first push) — individual product rows, linked to parent request
-  - Fields: Reference ID (primary), Request (linked record), ASIN, Product Name, UPC, FNSKU, Yun Description, Type (Catalog/New Product), Pack Qty, Cost Per Piece RMB, Units By Shipment (JSON), S1–S10 Units, Total Units, Total Pieces, Cost RMB, Cost USD
+  - Fields: Reference ID (primary), Request (linked record), ASIN, Product Name, UPC, FNSKU, Yun Description, Type (Catalog/New Product), Pack Qty, Masterbox Qty, Cost Per Piece RMB, Units By Shipment (JSON), S1–S10 Units, Total Units, Total Pieces, Cost RMB, Cost USD
 - Table IDs cached in localStorage under `airtable_reorder_tables` key
 - User's Airtable PAT stored in localStorage (configured via Settings gear icon)
 
@@ -41,7 +42,7 @@ A single-page HTML app for managing re-order requests and shipment plans. Replac
 - **List Screen**: Shows all saved re-order requests as cards (title, date, item/unit/piece counts). "+ New Request" button to create. Click a card to open it. Delete button per card (hidden for Approved/Shipped requests). Below the request list is an **ASIN Summary** section (collapsible, blue header) aggregating every item across all local requests — columns: ASIN, Description, Qty (Units), Request ID, Status. Supports text filter, status dropdown filter, and sortable columns (default sort by status). Click a row to jump into that request.
 - **Editor Screen**: Opened when a request is selected. Has Back/Save/Delete buttons (Delete hidden when Approved/Shipped) and a Status dropdown in a top bar.
   - **Data Entry tab**: Shipment config (add/remove shipments, method, destination, description) + item table. Pack Qty is read-only (pulled from Airtable). Exchange rate field in header (editable, with "Fetch Live" button, saved per request).
-  - **Sir Ohad View tab**: Formatted view with costs, subtotals, grand total — downloadable as Excel
+  - **Sir Ohad View tab**: Formatted view with costs, subtotals, grand total — downloadable as Excel. Includes a **Masterbox** column (between Pieces and Cost in RMB) showing total masterboxes per item, computed as `units / masterboxQty`. Column appears in both Total Order Summary and every per-shipment subtable; Supplier view stays unchanged.
   - **Supplier View tab**: Formatted view without costs — downloadable as Excel
   - **Summary tab**: Overview cards, shipment breakdown, notes
 - **Load from Airtable**: Fetches requests from Airtable. Auto-syncs already-imported requests silently (overwrites local state with latest Airtable data, preserving linked record IDs) — so changes pushed from another device propagate on the next Load. Shows a "synced N existing" count and lists only the not-yet-imported remote requests with "Import" buttons. Clicking an un-imported card shows a read-only detail view with an "Import to Local & Edit" button. Once imported, the request appears as a normal local card. Shared helper `buildStateFromAirtable(reqRecord, itemRecords)` powers both import and silent sync.
@@ -50,7 +51,8 @@ A single-page HTML app for managing re-order requests and shipment plans. Replac
 ## Item Types
 Each item row has a **Type** dropdown (first column):
 - **Catalog**: Default. Enter ASIN → auto-pulls Product Name, UPC, FNSKU, Pack Qty, Cost/pc from Airtable. These fields are read-only.
-- **New Product**: For products not yet in the Airtable catalog. ASIN field is disabled. Product Name, UPC, FNSKU, Pack Qty are all manually editable.
+- **New Product**: For products not yet assigned an ASIN. ASIN field is disabled. Product Name, UPC, FNSKU, Pack Qty are all manually editable.
+  - **UPC lookup**: If the product already exists in the Airtable catalog (without an ASIN), user can type the UPC and click the **🔍 Lookup** button below the UPC field (or wait for debounced auto-trigger) to auto-fill Product Name, FNSKU, Pack Qty, Cost/pc, and Yun Description from Airtable. Implemented via `lookupUPC(upc, rowId)` and `triggerUpcLookup(rowId)`. Formula uses `{UPC}&""="..."` cast so it matches whether UPC is stored as text or number in Airtable, plus leading-zero variants and a `FIND` substring fallback.
 - The `type` field (`'catalog'` or `'new'`) is persisted per item. Existing saved items without a type default to `'catalog'`.
 
 ## Reference ID
@@ -83,6 +85,7 @@ Each item row has a **Type** dropdown (first column):
 - Items store units per shipment in a `units` map: `{shipmentId: qty}`
 - Shipments stored as array in state; old 2-shipment format auto-migrated on load
 - Pieces = Units × Pack Quantity
+- Masterboxes = Units ÷ Masterbox Quantity (only computed when masterboxQty > 0; via `calcMasterboxes()` in `shipmentItems()` and `totalItems()`)
 - Cost RMB = Pieces × Cost per piece
 - Est. Cost USD = Cost RMB × Exchange Rate (editable per request; defaults to live rate from open.er-api.com/v6/latest/CNY, fallback 0.1381; "Fetch Live" button to refresh; sanity check rejects rates outside 0.05–0.30)
 - Total Order Summary combines same ASINs across shipments — displayed FIRST in both views (highlighted purple), followed by "SHIPMENT PLANS" section header, then individual shipments
@@ -101,7 +104,7 @@ Each item row has a **Type** dropdown (first column):
 - Airtable API returns fields keyed by **field name** (e.g., `"Product Name"`), not field ID — lookup code must use names to read response
 - When creating Airtable tables via API, the first field in the array becomes the primary field — it must be a text type (not linked records)
 - Airtable table IDs are cached in localStorage (`airtable_reorder_tables`); if tables are deleted in Airtable, clear this key to force re-creation
-- New fields (`Shipments Config`, `Units By Shipment`) are auto-added to existing Airtable tables on first push after upgrade (via `ensureFieldExists`); cached with `fieldsUpgraded` flag
+- New fields (`Shipments Config`, `Units By Shipment`, `Masterbox Qty`) are auto-added to existing Airtable tables on first push after upgrade (via `ensureFieldExists`); cached with `fieldsUpgraded` and `masterboxFieldAdded` flags — bumping the gate flag forces re-check after schema upgrades
 - All record create/update calls use `typecast: true` so Airtable auto-creates new singleSelect options (e.g., Shipped, Cancelled) without needing schema write permissions
 - New select choices (Shipped, Cancelled) are also added via `ensureSelectChoices()` PATCH when schema write is available; cached with `statusChoicesV2` flag
 - Push auto-recovers from deleted Airtable records: if a request or line item record was deleted in Airtable but the local app still holds its record ID, the push detects the `ROW_DOES_NOT_EXIST` 422 error and re-creates the record instead of failing
