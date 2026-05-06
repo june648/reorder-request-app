@@ -778,6 +778,7 @@ function openRequest(id) {
   updateEditorBar();
   switchTab('entry');
   showScreen('editor');
+  backfillMasterboxQty();
 }
 
 function goBackToList() {
@@ -954,6 +955,39 @@ async function lookupUPC(upc, rowId) {
 function setLookupStatus(rowId, msg, cls) {
   const el = document.querySelector(`[data-status="${rowId}"]`);
   if (el) { el.textContent = msg; el.className = 'lookup-status ' + cls; }
+}
+
+// Silent backfill: fetch Masterbox Quantity from Products Catalog for catalog
+// items missing it (existing requests created before the masterbox feature).
+async function backfillMasterboxQty() {
+  const pat = localStorage.getItem('airtable_pat');
+  if (!pat) return;
+  const need = items.filter(i => i.type !== 'new' && i.asin && !(Number(i.masterboxQty) > 0));
+  if (!need.length) return;
+  const asins = [...new Set(need.map(i => i.asin))];
+  const formula = 'OR(' + asins.map(a => `{ASIN}="${a.replace(/"/g,'\\"')}"`).join(',') + ')';
+  const url = `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=${encodeURIComponent(formula)}&fields%5B%5D=${FIELD_IDS.asin}&fields%5B%5D=${FIELD_IDS.masterboxQty}`;
+  try {
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${pat}` } });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (!data.records || !data.records.length) return;
+    const byAsin = {};
+    data.records.forEach(r => { if (r.fields.ASIN) byAsin[r.fields.ASIN] = Number(r.fields['Masterbox Quantity']) || 0; });
+    let changed = 0;
+    items.forEach(i => {
+      if (i.type !== 'new' && i.asin && byAsin[i.asin] && !(Number(i.masterboxQty) > 0)) {
+        i.masterboxQty = byAsin[i.asin];
+        changed++;
+      }
+    });
+    if (changed > 0) {
+      refreshViews();
+      autoSaveCurrentRequest();
+    }
+  } catch (e) {
+    console.warn('[Masterbox Backfill] failed:', e.message);
+  }
 }
 
 // ── Shipment Management ──
