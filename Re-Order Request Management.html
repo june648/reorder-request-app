@@ -423,7 +423,8 @@ const FIELD_IDS = {
   packQty: 'fldpsVMUPCz3JvYYn',
   masterSku: 'fldYoqEElKrjS3S7t',
   costRmb: 'fldSc8CgYfqydf9Vf',
-  yunDesc: 'fldffzSXF7Tsjs8xD'
+  yunDesc: 'fldffzSXF7Tsjs8xD',
+  masterboxQty: encodeURIComponent('Masterbox Quantity')
 };
 
 // ── Shipment Color Palette ──
@@ -873,7 +874,7 @@ async function lookupASIN(asin, rowId) {
   setLookupStatus(rowId, 'Looking up...', 'loading');
   try {
     const formula = encodeURIComponent(`{ASIN}="${asin}"`);
-    const url = `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=${formula}&fields%5B%5D=${FIELD_IDS.asin}&fields%5B%5D=${FIELD_IDS.name}&fields%5B%5D=${FIELD_IDS.upc}&fields%5B%5D=${FIELD_IDS.packQty}&fields%5B%5D=${FIELD_IDS.masterSku}&fields%5B%5D=${FIELD_IDS.costRmb}&fields%5B%5D=${FIELD_IDS.yunDesc}`;
+    const url = `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=${formula}&fields%5B%5D=${FIELD_IDS.asin}&fields%5B%5D=${FIELD_IDS.name}&fields%5B%5D=${FIELD_IDS.upc}&fields%5B%5D=${FIELD_IDS.packQty}&fields%5B%5D=${FIELD_IDS.masterSku}&fields%5B%5D=${FIELD_IDS.costRmb}&fields%5B%5D=${FIELD_IDS.yunDesc}&fields%5B%5D=${FIELD_IDS.masterboxQty}`;
     const resp = await fetch(url, { headers: { Authorization: `Bearer ${pat}` } });
     if (!resp.ok) { setLookupStatus(rowId, `API error ${resp.status}`, 'err'); return; }
     const data = await resp.json();
@@ -887,6 +888,7 @@ async function lookupASIN(asin, rowId) {
     item.packQty = Number(f['Pack Quantity']) || 1;
     item.costPerPiece = Number(f['Per Piece Cost (RMB)']) || 0;
     item.yunDesc = f['Yun Description'] || '';
+    item.masterboxQty = Number(f['Masterbox Quantity']) || 0;
     renderItems();
     refreshViews();
     setLookupStatus(rowId, 'Found', 'ok');
@@ -915,7 +917,7 @@ async function lookupUPC(upc, rowId) {
   try {
     // Match UPC whether stored as text or number, and try common leading-zero variants
     const formula = `OR({UPC}&""="${upc}", {UPC}&""="0${upc}", {UPC}&""="00${upc}", FIND("${upc}", {UPC}&"")>0)`;
-    const url = `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=${encodeURIComponent(formula)}&fields%5B%5D=${FIELD_IDS.asin}&fields%5B%5D=${FIELD_IDS.name}&fields%5B%5D=${FIELD_IDS.upc}&fields%5B%5D=${FIELD_IDS.packQty}&fields%5B%5D=${FIELD_IDS.masterSku}&fields%5B%5D=${FIELD_IDS.costRmb}&fields%5B%5D=${FIELD_IDS.yunDesc}`;
+    const url = `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=${encodeURIComponent(formula)}&fields%5B%5D=${FIELD_IDS.asin}&fields%5B%5D=${FIELD_IDS.name}&fields%5B%5D=${FIELD_IDS.upc}&fields%5B%5D=${FIELD_IDS.packQty}&fields%5B%5D=${FIELD_IDS.masterSku}&fields%5B%5D=${FIELD_IDS.costRmb}&fields%5B%5D=${FIELD_IDS.yunDesc}&fields%5B%5D=${FIELD_IDS.masterboxQty}`;
     console.log('[UPC Lookup] Formula:', formula);
     console.log('[UPC Lookup] URL:', url);
     const resp = await fetch(url, { headers: { Authorization: `Bearer ${pat}` } });
@@ -938,6 +940,7 @@ async function lookupUPC(upc, rowId) {
     item.packQty = Number(f['Pack Quantity']) || 1;
     item.costPerPiece = Number(f['Per Piece Cost (RMB)']) || 0;
     item.yunDesc = f['Yun Description'] || '';
+    item.masterboxQty = Number(f['Masterbox Quantity']) || 0;
     renderItems();
     refreshViews();
     setLookupStatus(rowId, 'Found in catalog', 'ok');
@@ -1009,7 +1012,7 @@ function renderShipmentConfig() {
 
 // ── Item Management ──
 function addItemRow() {
-  items.push({ id: ++idCounter, type: 'catalog', asin: '', name: '', upc: '', fnsku: '', yunDesc: '', packQty: 1, costPerPiece: 0, units: {} });
+  items.push({ id: ++idCounter, type: 'catalog', asin: '', name: '', upc: '', fnsku: '', yunDesc: '', packQty: 1, masterboxQty: 0, costPerPiece: 0, units: {} });
   renderItems();
 }
 function removeItem(id) {
@@ -1140,6 +1143,11 @@ function renderItems() {
 function esc(s) { return String(s||'').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 function fmtN(n) { return Number(n).toLocaleString('en-US'); }
 function fmtC(n) { return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtMb(n) {
+  const v = Number(n) || 0;
+  if (v === 0) return '—';
+  return v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
 
 // ── Shipment Labels ──
 function getShipmentLabel(s) {
@@ -1149,12 +1157,18 @@ function getShipmentLabel(s) {
 }
 
 // ── Computed Data ──
+function calcMasterboxes(units, masterboxQty) {
+  const mq = Number(masterboxQty) || 0;
+  return mq > 0 ? units / mq : 0;
+}
+
 function shipmentItems(shipmentId) {
   return items.filter(i => ((i.units && i.units[shipmentId]) || 0) > 0).map(i => {
     const units = i.units[shipmentId] || 0;
     const pieces = units * (i.packQty || 1);
     const costRmb = pieces * (i.costPerPiece || 0);
-    return { ...i, units: units, pieces, costRmb, costUsd: costRmb * getActiveExchangeRate() };
+    const masterboxes = calcMasterboxes(units, i.masterboxQty);
+    return { ...i, units: units, pieces, masterboxes, costRmb, costUsd: costRmb * getActiveExchangeRate() };
   });
 }
 
@@ -1173,7 +1187,8 @@ function totalItems() {
   return Object.values(map).map(i => {
     const pieces = i.units * (i.packQty || 1);
     const costRmb = pieces * (i.costPerPiece || 0);
-    return { ...i, pieces, costRmb, costUsd: costRmb * getActiveExchangeRate() };
+    const masterboxes = calcMasterboxes(i.units, i.masterboxQty);
+    return { ...i, pieces, masterboxes, costRmb, costUsd: costRmb * getActiveExchangeRate() };
   });
 }
 
@@ -1188,13 +1203,13 @@ function renderOhadView() {
   let html = `<div class="view-header"><h1>${esc(title)}</h1><h2>${esc(subtitle)}</h2><div class="date-line">Date: ${date}</div></div>`;
 
   function ohadTable(items, isTotal) {
-    let h = `<table class="view-table"><thead><tr><th>ASIN</th><th>Product</th><th class="num">Units</th><th class="num">Pieces</th><th class="num">Cost in RMB</th><th class="num">Est. Cost in USD</th></tr></thead><tbody>`;
-    let tUnits=0, tPieces=0, tRmb=0, tUsd=0;
-    items.forEach(i => { tUnits+=i.units; tPieces+=i.pieces; tRmb+=i.costRmb; tUsd+=i.costUsd;
-      h += `<tr><td>${esc(i.asin)}</td><td>${esc(i.name)}</td><td class="num">${fmtN(i.units)}</td><td class="num">${fmtN(i.pieces)}</td><td class="num">${fmtC(i.costRmb)}</td><td class="num">${fmtC(i.costUsd)}</td></tr>`;
+    let h = `<table class="view-table"><thead><tr><th>ASIN</th><th>Product</th><th class="num">Units</th><th class="num">Pieces</th><th class="num">Masterbox</th><th class="num">Cost in RMB</th><th class="num">Est. Cost in USD</th></tr></thead><tbody>`;
+    let tUnits=0, tPieces=0, tMb=0, tRmb=0, tUsd=0;
+    items.forEach(i => { tUnits+=i.units; tPieces+=i.pieces; tMb+=(i.masterboxes||0); tRmb+=i.costRmb; tUsd+=i.costUsd;
+      h += `<tr><td>${esc(i.asin)}</td><td>${esc(i.name)}</td><td class="num">${fmtN(i.units)}</td><td class="num">${fmtN(i.pieces)}</td><td class="num">${fmtMb(i.masterboxes)}</td><td class="num">${fmtC(i.costRmb)}</td><td class="num">${fmtC(i.costUsd)}</td></tr>`;
     });
     const rowCls = isTotal ? 'grandtotal' : 'subtotal';
-    h += `<tr class="${rowCls}"><td colspan="2"><strong>${isTotal?'Grand Total':'Subtotal'}</strong></td><td class="num">${fmtN(tUnits)}</td><td class="num">${fmtN(tPieces)}</td><td class="num">${fmtC(tRmb)}</td><td class="num">${fmtC(tUsd)}</td></tr>`;
+    h += `<tr class="${rowCls}"><td colspan="2"><strong>${isTotal?'Grand Total':'Subtotal'}</strong></td><td class="num">${fmtN(tUnits)}</td><td class="num">${fmtN(tPieces)}</td><td class="num">${fmtMb(tMb)}</td><td class="num">${fmtC(tRmb)}</td><td class="num">${fmtC(tUsd)}</td></tr>`;
     h += '</tbody></table>';
     return h;
   }
@@ -1297,6 +1312,7 @@ const XL = {
   },
   numFmt: '#,##0',
   costFmt: '#,##0.00',
+  mbFmt: '#,##0.##',
   cell(v, s) { return { v, s }; },
 };
 
@@ -1330,7 +1346,7 @@ function buildOhadSheet() {
   const date = document.getElementById('hdrDate').value;
   const notes = document.getElementById('summaryNotes').value;
   const tot = totalItems();
-  const COLS = 6;
+  const COLS = 7;
   const data = [];
 
   // Title block
@@ -1356,18 +1372,19 @@ function buildOhadSheet() {
       ]);
     }
 
-    const headers = ['ASIN','Product','Units','Pieces','Cost in RMB','Est. Cost in USD'];
+    const headers = ['ASIN','Product','Units','Pieces','Masterbox','Cost in RMB','Est. Cost in USD'];
     data.push(headers.map(h => styledCell(h, { sz: 10, bold: true, fill: lightBg, fontColor: isTotal ? '4A235A' : XL.BLACK })));
 
-    let tU=0,tP=0,tR=0,tD=0;
+    let tU=0,tP=0,tM=0,tR=0,tD=0;
     items.forEach(i => {
-      tU+=i.units; tP+=i.pieces; tR+=i.costRmb; tD+=i.costUsd;
+      tU+=i.units; tP+=i.pieces; tM+=(i.masterboxes||0); tR+=i.costRmb; tD+=i.costUsd;
       const rf = rowBg ? { fill: rowBg } : {};
       data.push([
         styledCell(i.asin, rf),
         styledCell(i.name, rf),
         styledCell(i.units, { numFmt: XL.numFmt, ...rf }),
         styledCell(i.pieces, { numFmt: XL.numFmt, ...rf }),
+        styledCell(round2(i.masterboxes||0), { numFmt: XL.mbFmt, ...rf }),
         styledCell(round2(i.costRmb), { numFmt: XL.costFmt, ...rf }),
         styledCell(round2(i.costUsd), { numFmt: XL.costFmt, ...rf }),
       ]);
@@ -1381,6 +1398,7 @@ function buildOhadSheet() {
       styledCell('', { fill: totBg }),
       styledCell(tU, { bold: true, fill: totBg, numFmt: XL.numFmt, fontColor: totFont }),
       styledCell(tP, { bold: true, fill: totBg, numFmt: XL.numFmt, fontColor: totFont }),
+      styledCell(round2(tM), { bold: true, fill: totBg, numFmt: XL.mbFmt, fontColor: totFont }),
       styledCell(round2(tR), { bold: true, fill: totBg, numFmt: XL.costFmt, fontColor: totFont }),
       styledCell(round2(tD), { bold: true, fill: totBg, numFmt: XL.costFmt, fontColor: totFont }),
     ]);
@@ -1407,7 +1425,7 @@ function buildOhadSheet() {
   }
 
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{wch:18},{wch:32},{wch:10},{wch:10},{wch:15},{wch:15}];
+  ws['!cols'] = [{wch:18},{wch:32},{wch:10},{wch:10},{wch:12},{wch:15},{wch:15}];
   return ws;
 }
 
@@ -1601,7 +1619,7 @@ function saveTableIds(ids) {
 
 async function ensureAirtableTables(pat) {
   const stored = getStoredTableIds();
-  if (stored && stored.requestsTableId && stored.lineItemsTableId && stored.fieldsUpgraded && stored.statusChoicesV2) return stored;
+  if (stored && stored.requestsTableId && stored.lineItemsTableId && stored.fieldsUpgraded && stored.statusChoicesV2 && stored.masterboxFieldAdded) return stored;
 
   try {
     const resp = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`, {
@@ -1625,12 +1643,13 @@ async function ensureAirtableTables(pat) {
     // Ensure new fields exist on existing tables (upgrade from v1 schema)
     await ensureFieldExists(pat, requestsTable, 'Shipments Config', { type: 'multilineText' });
     await ensureFieldExists(pat, lineItemsTable, 'Units By Shipment', { type: 'multilineText' });
+    await ensureFieldExists(pat, lineItemsTable, 'Masterbox Qty', { type: 'number', options: { precision: 0 } });
     const choicesOk = await ensureSelectChoices(pat, requestsTable, 'Status', [
       { name: 'Shipped', color: 'purpleLight2' },
       { name: 'Cancelled', color: 'redLight2' }
     ]);
 
-    const ids = { requestsTableId: requestsTable.id, lineItemsTableId: lineItemsTable.id, fieldsUpgraded: true, statusChoicesV2: choicesOk };
+    const ids = { requestsTableId: requestsTable.id, lineItemsTableId: lineItemsTable.id, fieldsUpgraded: true, statusChoicesV2: choicesOk, masterboxFieldAdded: true };
     saveTableIds(ids);
     return ids;
   } catch(e) {
@@ -1736,6 +1755,7 @@ async function createLineItemsTable(pat, requestsTableId) {
         { name: 'New Product', color: 'purpleLight2' }
       ]}},
       { name: 'Pack Qty', type: 'number', options: { precision: 0 } },
+      { name: 'Masterbox Qty', type: 'number', options: { precision: 0 } },
       { name: 'Cost Per Piece RMB', type: 'number', options: { precision: 2 } },
       { name: 'Units By Shipment', type: 'multilineText' },
       { name: 'S1 Units', type: 'number', options: { precision: 0 } },
@@ -1881,6 +1901,7 @@ async function pushToAirtable() {
         'Yun Description': item.yunDesc || '',
         'Type': item.type === 'new' ? 'New Product' : 'Catalog',
         'Pack Qty': item.packQty || 1,
+        'Masterbox Qty': item.masterboxQty || 0,
         'Cost Per Piece RMB': item.costPerPiece || 0,
         'Units By Shipment': JSON.stringify(item.units || {}),
         'S1 Units': shipments[0] ? (item.units[shipments[0].id] || 0) : 0,
@@ -2365,6 +2386,7 @@ function buildStateFromAirtable(reqRecord, itemRecords) {
       upc: f['UPC'] || '',
       fnsku: f['FNSKU'] || '',
       packQty: f['Pack Qty'] || 1,
+      masterboxQty: f['Masterbox Qty'] || 0,
       costPerPiece: f['Cost Per Piece RMB'] || 0,
       yunDesc: f['Yun Description'] || '',
       units: units
