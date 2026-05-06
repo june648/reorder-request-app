@@ -1237,7 +1237,7 @@ function renderOhadView() {
   let html = `<div class="view-header"><h1>${esc(title)}</h1><h2>${esc(subtitle)}</h2><div class="date-line">Date: ${date}</div></div>`;
 
   function ohadTable(items, isTotal) {
-    let h = `<table class="view-table"><thead><tr><th>ASIN</th><th>Product</th><th class="num">Units</th><th class="num">Pieces</th><th class="num">Masterbox</th><th class="num">Cost in RMB</th><th class="num">Est. Cost in USD</th></tr></thead><tbody>`;
+    let h = `<table class="view-table"><thead><tr><th>ASIN</th><th>Product</th><th class="num">Units</th><th class="num">Pieces</th><th class="num">Number of Cartons</th><th class="num">Cost in RMB</th><th class="num">Est. Cost in USD</th></tr></thead><tbody>`;
     let tUnits=0, tPieces=0, tMb=0, tRmb=0, tUsd=0;
     items.forEach(i => { tUnits+=i.units; tPieces+=i.pieces; tMb+=(i.masterboxes||0); tRmb+=i.costRmb; tUsd+=i.costUsd;
       h += `<tr><td>${esc(i.asin)}</td><td>${esc(i.name)}</td><td class="num">${fmtN(i.units)}</td><td class="num">${fmtN(i.pieces)}</td><td class="num">${fmtMb(i.masterboxes)}</td><td class="num">${fmtC(i.costRmb)}</td><td class="num">${fmtC(i.costUsd)}</td></tr>`;
@@ -1406,7 +1406,7 @@ function buildOhadSheet() {
       ]);
     }
 
-    const headers = ['ASIN','Product','Units','Pieces','Masterbox','Cost in RMB','Est. Cost in USD'];
+    const headers = ['ASIN','Product','Units','Pieces','Number of Cartons','Cost in RMB','Est. Cost in USD'];
     data.push(headers.map(h => styledCell(h, { sz: 10, bold: true, fill: lightBg, fontColor: isTotal ? '4A235A' : XL.BLACK })));
 
     let tU=0,tP=0,tM=0,tR=0,tD=0;
@@ -1459,7 +1459,7 @@ function buildOhadSheet() {
   }
 
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{wch:18},{wch:32},{wch:10},{wch:10},{wch:12},{wch:15},{wch:15}];
+  ws['!cols'] = [{wch:18},{wch:32},{wch:10},{wch:10},{wch:18},{wch:15},{wch:15}];
   return ws;
 }
 

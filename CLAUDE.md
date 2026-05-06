@@ -2,7 +2,7 @@
 
 ## Overview
 A single-page HTML app for managing re-order requests and shipment plans. Replaces manual Excel creation for two audiences:
-- **Sir Ohad View**: Internal view with ASIN, Product, Units, Pieces, Masterbox, Cost RMB, Est. Cost USD
+- **Sir Ohad View**: Internal view with ASIN, Product, Units, Pieces, Number of Cartons, Cost RMB, Est. Cost USD
 - **Supplier View**: External view with FN SKU (=ASIN), UPC, SKU (=Master SKU), Product Description (from Yun Description), Units, Pieces (no costs)
 
 ## Location
@@ -42,7 +42,7 @@ A single-page HTML app for managing re-order requests and shipment plans. Replac
 - **List Screen**: Shows all saved re-order requests as cards (title, date, item/unit/piece counts). "+ New Request" button to create. Click a card to open it. Delete button per card (hidden for Approved/Shipped requests). Below the request list is an **ASIN Summary** section (collapsible, blue header) aggregating every item across all local requests — columns: ASIN, Description, Qty (Units), Request ID, Status. Supports text filter, status dropdown filter, and sortable columns (default sort by status). Click a row to jump into that request.
 - **Editor Screen**: Opened when a request is selected. Has Back/Save/Delete buttons (Delete hidden when Approved/Shipped) and a Status dropdown in a top bar.
   - **Data Entry tab**: Shipment config (add/remove shipments, method, destination, description) + item table. Pack Qty is read-only (pulled from Airtable). Exchange rate field in header (editable, with "Fetch Live" button, saved per request).
-  - **Sir Ohad View tab**: Formatted view with costs, subtotals, grand total — downloadable as Excel. Includes a **Masterbox** column (between Pieces and Cost in RMB) showing total masterboxes per item, computed as `units / masterboxQty`. Column appears in both Total Order Summary and every per-shipment subtable; Supplier view stays unchanged.
+  - **Sir Ohad View tab**: Formatted view with costs, subtotals, grand total — downloadable as Excel. Includes a **Number of Cartons** column (between Pieces and Cost in RMB) showing total master cartons per item, computed as `units / masterboxQty` (the underlying Airtable field is still `Masterbox Quantity`). Column appears in both Total Order Summary and every per-shipment subtable; Supplier view stays unchanged.
   - **Supplier View tab**: Formatted view without costs — downloadable as Excel
   - **Summary tab**: Overview cards, shipment breakdown, notes
 - **Load from Airtable**: Fetches requests from Airtable. Auto-syncs already-imported requests silently (overwrites local state with latest Airtable data, preserving linked record IDs) — so changes pushed from another device propagate on the next Load. Shows a "synced N existing" count and lists only the not-yet-imported remote requests with "Import" buttons. Clicking an un-imported card shows a read-only detail view with an "Import to Local & Edit" button. Once imported, the request appears as a normal local card. Shared helper `buildStateFromAirtable(reqRecord, itemRecords)` powers both import and silent sync.
