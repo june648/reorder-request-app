@@ -1237,13 +1237,13 @@ function renderOhadView() {
   let html = `<div class="view-header"><h1>${esc(title)}</h1><h2>${esc(subtitle)}</h2><div class="date-line">Date: ${date}</div></div>`;
 
   function ohadTable(items, isTotal) {
-    let h = `<table class="view-table"><thead><tr><th>ASIN</th><th>Product</th><th class="num">Units</th><th class="num">Pieces</th><th class="num">Number of Cartons</th><th class="num">Cost in RMB</th><th class="num">Est. Cost in USD</th></tr></thead><tbody>`;
+    let h = `<table class="view-table"><thead><tr><th>ASIN</th><th>Product</th><th class="num">Units</th><th class="num">Pieces</th><th class="num" style="text-align:center">Number of Cartons</th><th class="num">Cost in RMB</th><th class="num">Est. Cost in USD</th></tr></thead><tbody>`;
     let tUnits=0, tPieces=0, tMb=0, tRmb=0, tUsd=0;
     items.forEach(i => { tUnits+=i.units; tPieces+=i.pieces; tMb+=(i.masterboxes||0); tRmb+=i.costRmb; tUsd+=i.costUsd;
-      h += `<tr><td>${esc(i.asin)}</td><td>${esc(i.name)}</td><td class="num">${fmtN(i.units)}</td><td class="num">${fmtN(i.pieces)}</td><td class="num">${fmtMb(i.masterboxes)}</td><td class="num">${fmtC(i.costRmb)}</td><td class="num">${fmtC(i.costUsd)}</td></tr>`;
+      h += `<tr><td>${esc(i.asin)}</td><td>${esc(i.name)}</td><td class="num">${fmtN(i.units)}</td><td class="num">${fmtN(i.pieces)}</td><td class="num" style="text-align:center">${fmtMb(i.masterboxes)}</td><td class="num">${fmtC(i.costRmb)}</td><td class="num">${fmtC(i.costUsd)}</td></tr>`;
     });
     const rowCls = isTotal ? 'grandtotal' : 'subtotal';
-    h += `<tr class="${rowCls}"><td colspan="2"><strong>${isTotal?'Grand Total':'Subtotal'}</strong></td><td class="num">${fmtN(tUnits)}</td><td class="num">${fmtN(tPieces)}</td><td class="num">${fmtMb(tMb)}</td><td class="num">${fmtC(tRmb)}</td><td class="num">${fmtC(tUsd)}</td></tr>`;
+    h += `<tr class="${rowCls}"><td colspan="2"><strong>${isTotal?'Grand Total':'Subtotal'}</strong></td><td class="num">${fmtN(tUnits)}</td><td class="num">${fmtN(tPieces)}</td><td class="num" style="text-align:center">${fmtMb(tMb)}</td><td class="num">${fmtC(tRmb)}</td><td class="num">${fmtC(tUsd)}</td></tr>`;
     h += '</tbody></table>';
     return h;
   }
@@ -2341,18 +2341,18 @@ async function viewAirtableRequest(refId, title, subtitle, date, status) {
           <td>${esc(f['Product Name'] || '')}</td>
           <td style="text-align:right">${fmtN(units)}</td>
           <td style="text-align:right">${fmtN(pieces)}</td>
-          <td style="text-align:right">${fmtMb(mb)}</td>
+          <td style="text-align:center">${fmtMb(mb)}</td>
           <td style="text-align:right">${costRmb ? fmtN(Math.round(costRmb)) : '—'}</td>
           <td style="text-align:right">${costUsd ? '$' + costUsd.toFixed(2) : '—'}</td>
         </tr>`;
       }).join('');
       return `<table>
-        <thead><tr><th>ASIN</th><th>Product</th><th>Units</th><th>Pieces</th><th>Number of Cartons</th><th>Cost RMB</th><th>Cost USD</th></tr></thead>
+        <thead><tr><th>ASIN</th><th>Product</th><th>Units</th><th>Pieces</th><th style="text-align:center">Number of Cartons</th><th>Cost RMB</th><th>Cost USD</th></tr></thead>
         <tbody>${rows}
         <tr class="subtotal"><td colspan="2"><strong>Subtotal</strong></td>
           <td style="text-align:right"><strong>${fmtN(totalUnits)}</strong></td>
           <td style="text-align:right"><strong>${fmtN(totalPieces)}</strong></td>
-          <td style="text-align:right"><strong>${fmtMb(totalMb)}</strong></td>
+          <td style="text-align:center"><strong>${fmtMb(totalMb)}</strong></td>
           <td style="text-align:right"><strong>${totalCostRmb ? fmtN(Math.round(totalCostRmb)) : '—'}</strong></td>
           <td style="text-align:right"><strong>${totalCostUsd ? '$' + totalCostUsd.toFixed(2) : '—'}</strong></td>
         </tr></tbody>
