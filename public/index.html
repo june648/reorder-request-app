@@ -2291,19 +2291,49 @@ async function viewAirtableRequest(refId, title, subtitle, date, status) {
     const data = await resp.json();
     const items = data.records;
 
+    // Backfill Masterbox Qty from Products Catalog for line items that don't have it
+    // (e.g. requests pushed before the Masterbox Qty field existed)
+    try {
+      const needAsins = [...new Set(items
+        .filter(i => i.fields.ASIN && !(Number(i.fields['Masterbox Qty']) > 0))
+        .map(i => i.fields.ASIN))];
+      if (needAsins.length > 0) {
+        const formula = 'OR(' + needAsins.map(a => `{ASIN}="${a.replace(/"/g,'\\"')}"`).join(',') + ')';
+        const pcUrl = `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=${encodeURIComponent(formula)}&fields%5B%5D=${FIELD_IDS.asin}&fields%5B%5D=${FIELD_IDS.masterboxQty}`;
+        const pcResp = await fetch(pcUrl, { headers: { Authorization: `Bearer ${pat}` } });
+        if (pcResp.ok) {
+          const pcData = await pcResp.json();
+          const byAsin = {};
+          (pcData.records || []).forEach(r => {
+            if (r.fields.ASIN) byAsin[r.fields.ASIN] = Number(r.fields['Masterbox Quantity']) || 0;
+          });
+          items.forEach(i => {
+            if (!(Number(i.fields['Masterbox Qty']) > 0) && byAsin[i.fields.ASIN]) {
+              i.fields['Masterbox Qty'] = byAsin[i.fields.ASIN];
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[Read-only Masterbox lookup] failed:', e.message);
+    }
+
     function renderItemTable(shipmentItems, getUnits) {
       if (shipmentItems.length === 0) return '<div style="color:#888;padding:8px;font-size:12px">No items</div>';
-      let totalUnits = 0, totalPieces = 0, totalCostRmb = 0, totalCostUsd = 0;
+      let totalUnits = 0, totalPieces = 0, totalMb = 0, totalCostRmb = 0, totalCostUsd = 0;
       const rows = shipmentItems.map(i => {
         const f = i.fields;
         const units = getUnits(i);
         const pieces = units * (f['Pack Qty'] || 1);
+        const mq = Number(f['Masterbox Qty']) || 0;
+        const mb = mq > 0 ? units / mq : 0;
         const costPerPiece = f['Cost Per Piece RMB'] || 0;
         const exRate = f['Cost USD'] && f['Cost RMB'] ? f['Cost USD'] / f['Cost RMB'] : 0.1381;
         const costRmb = pieces * costPerPiece;
         const costUsd = costRmb * exRate;
         totalUnits += units;
         totalPieces += pieces;
+        totalMb += mb;
         totalCostRmb += costRmb;
         totalCostUsd += costUsd;
         return `<tr>
@@ -2311,16 +2341,18 @@ async function viewAirtableRequest(refId, title, subtitle, date, status) {
           <td>${esc(f['Product Name'] || '')}</td>
           <td style="text-align:right">${fmtN(units)}</td>
           <td style="text-align:right">${fmtN(pieces)}</td>
+          <td style="text-align:right">${fmtMb(mb)}</td>
           <td style="text-align:right">${costRmb ? fmtN(Math.round(costRmb)) : '—'}</td>
           <td style="text-align:right">${costUsd ? '$' + costUsd.toFixed(2) : '—'}</td>
         </tr>`;
       }).join('');
       return `<table>
-        <thead><tr><th>ASIN</th><th>Product</th><th>Units</th><th>Pieces</th><th>Cost RMB</th><th>Cost USD</th></tr></thead>
+        <thead><tr><th>ASIN</th><th>Product</th><th>Units</th><th>Pieces</th><th>Number of Cartons</th><th>Cost RMB</th><th>Cost USD</th></tr></thead>
         <tbody>${rows}
         <tr class="subtotal"><td colspan="2"><strong>Subtotal</strong></td>
           <td style="text-align:right"><strong>${fmtN(totalUnits)}</strong></td>
           <td style="text-align:right"><strong>${fmtN(totalPieces)}</strong></td>
+          <td style="text-align:right"><strong>${fmtMb(totalMb)}</strong></td>
           <td style="text-align:right"><strong>${totalCostRmb ? fmtN(Math.round(totalCostRmb)) : '—'}</strong></td>
           <td style="text-align:right"><strong>${totalCostUsd ? '$' + totalCostUsd.toFixed(2) : '—'}</strong></td>
         </tr></tbody>
