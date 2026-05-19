@@ -64,11 +64,11 @@ Each item row has a **Type** dropdown (first column):
 - Pushed to Airtable as the key identifier for both request and line item records
 
 ## Status
-- Dropdown in editor bar with five values: **Draft** (yellow), **For Approval** (blue), **Approved** (green), **Shipped** (purple), **Cancelled** (red)
+- Dropdown in editor bar with six values: **Draft** (yellow), **For Approval** (blue), **Approved** (green), **Shipped** (purple), **Delivered** (teal — FBA/warehouse received the items), **Cancelled** (red)
 - New requests default to "Draft"
 - Status is persisted in state and shown as a color-coded badge on list cards
 - Pushed to Airtable on every push (both create and update)
-- **Approved and Shipped requests cannot be deleted** — Delete button is hidden on both list cards and editor bar; status change back re-enables deletion
+- **Approved, Shipped, and Delivered requests cannot be deleted** (defined in `PROTECTED_STATUSES`) — Delete button is hidden on both list cards and editor bar; status change back re-enables deletion
 
 ## Push to Airtable
 - **Manual only** — triggered by explicit "Push to Airtable" button in editor bar

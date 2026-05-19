@@ -63,6 +63,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f6f
 .status-chip.for-approval{background:#d1ecf1;color:#0c5460}
 .status-chip.approved{background:#d4edda;color:#155724}
 .status-chip.shipped{background:#e8daef;color:#6c3483}
+.status-chip.delivered{background:#d1f2eb;color:#0e6655}
 .status-chip.cancelled{background:#fadbd8;color:#922b21}
 .status-chip.all-chip{background:#e8eaef;color:#444}
 .asin-summary-table{width:100%;border-collapse:collapse;font-size:13px}
@@ -228,6 +229,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
 .rc-status.for-approval{background:#d1ecf1;color:#0c5460}
 .rc-status.approved{background:#d4edda;color:#155724}
 .rc-status.shipped{background:#e8daef;color:#6c3483}
+.rc-status.delivered{background:#d1f2eb;color:#0e6655}
 .rc-status.cancelled{background:#fadbd8;color:#922b21}
 .status-select{border:1px solid #d0d5dd;border-radius:6px;padding:5px 10px;font-size:13px;font-weight:600;font-family:inherit;outline:none;cursor:pointer;transition:border .15s}
 .status-select:focus{border-color:#4a7cff}
@@ -235,6 +237,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
 .status-select.for-approval{background:#d1ecf1;color:#0c5460}
 .status-select.approved{background:#d4edda;color:#155724}
 .status-select.shipped{background:#e8daef;color:#6c3483}
+.status-select.delivered{background:#d1f2eb;color:#0e6655}
 .status-select.cancelled{background:#fadbd8;color:#922b21}
 .at-section-title{font-size:14px;font-weight:700;color:#27ae60;margin-bottom:8px;display:flex;align-items:center;gap:8px}
 .at-card{background:#fff;border-radius:10px;padding:16px 22px;box-shadow:0 1px 4px rgba(0,0,0,.08);border:1px solid #d4edda;margin-bottom:8px;cursor:pointer;transition:box-shadow .15s;display:flex;align-items:center;gap:16px}
@@ -311,6 +314,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
       <option value="For Approval">For Approval</option>
       <option value="Approved">Approved</option>
       <option value="Shipped">Shipped</option>
+      <option value="Delivered">Delivered</option>
       <option value="Cancelled">Cancelled</option>
     </select>
     <button class="save-btn" onclick="saveCurrentRequest()">Save</button>
@@ -586,9 +590,10 @@ function getItemTotalUnits(item) {
   return (item.s1Units || 0) + (item.s2Units || 0);
 }
 
-const ALL_STATUSES = ['Draft','For Approval','Approved','Shipped','Cancelled'];
+const ALL_STATUSES = ['Draft','For Approval','Approved','Shipped','Delivered','Cancelled'];
 const ASIN_SUMMARY_STATE = { filter: '', statusSet: new Set(ALL_STATUSES), sortKey: 'status', sortDir: 'asc', collapsed: false };
-const STATUS_ORDER = { 'Draft':1, 'For Approval':2, 'Approved':3, 'Shipped':4, 'Cancelled':5 };
+const STATUS_ORDER = { 'Draft':1, 'For Approval':2, 'Approved':3, 'Shipped':4, 'Delivered':5, 'Cancelled':6 };
+const PROTECTED_STATUSES = ['Approved','Shipped','Delivered'];
 
 function buildAsinSummaryRows() {
   const reqs = getAllRequests();
@@ -747,7 +752,7 @@ function renderRequestList() {
         <div class="stat"><div class="sv">${fmtN(totalPieces)}</div>pieces</div>
       </div>
       <div class="rc-date">${esc(date)}</div>
-      ${['Approved','Shipped'].includes(s.status || 'Draft') ? '' : `<button class="rc-del" onclick="event.stopPropagation();deleteRequest('${r.id}')">Delete</button>`}
+      ${PROTECTED_STATUSES.includes(s.status || 'Draft') ? '' : `<button class="rc-del" onclick="event.stopPropagation();deleteRequest('${r.id}')">Delete</button>`}
     </div>`;
   }).join('');
 }
@@ -809,7 +814,7 @@ function autoSaveCurrentRequest() {
 
 function deleteCurrentRequest() {
   const cur = getAllRequests().find(r => r.id === currentRequestId);
-  if (cur && ['Approved','Shipped'].includes(cur.state?.status || 'Draft')) { alert('Approved/Shipped requests cannot be deleted.'); return; }
+  if (cur && PROTECTED_STATUSES.includes(cur.state?.status || 'Draft')) { alert('Approved/Shipped/Delivered requests cannot be deleted.'); return; }
   if (!confirm('Delete this re-order request? This cannot be undone.')) return;
   const reqs = getAllRequests().filter(r => r.id !== currentRequestId);
   saveAllRequests(reqs);
@@ -824,7 +829,7 @@ function deleteCurrentRequest() {
 
 function deleteRequest(id) {
   const req = getAllRequests().find(r => r.id === id);
-  if (req && ['Approved','Shipped'].includes(req.state?.status || 'Draft')) { alert('Approved/Shipped requests cannot be deleted.'); return; }
+  if (req && PROTECTED_STATUSES.includes(req.state?.status || 'Draft')) { alert('Approved/Shipped/Delivered requests cannot be deleted.'); return; }
   if (!confirm('Delete this re-order request?')) return;
   const reqs = getAllRequests().filter(r => r.id !== id);
   saveAllRequests(reqs);
@@ -842,7 +847,7 @@ function updateEditorBar() {
 function onStatusChange() {
   const sel = document.getElementById('statusSelect');
   sel.className = 'status-select ' + statusClass(sel.value);
-  document.querySelector('.del-btn-top').style.display = (sel.value === 'Approved' || sel.value === 'Shipped') ? 'none' : '';
+  document.querySelector('.del-btn-top').style.display = PROTECTED_STATUSES.includes(sel.value) ? 'none' : '';
 }
 function statusClass(v) { return v === 'For Approval' ? 'for-approval' : v.toLowerCase(); }
 
@@ -1653,7 +1658,7 @@ function saveTableIds(ids) {
 
 async function ensureAirtableTables(pat) {
   const stored = getStoredTableIds();
-  if (stored && stored.requestsTableId && stored.lineItemsTableId && stored.fieldsUpgraded && stored.statusChoicesV2 && stored.masterboxFieldAdded) return stored;
+  if (stored && stored.requestsTableId && stored.lineItemsTableId && stored.fieldsUpgraded && stored.statusChoicesV3 && stored.masterboxFieldAdded) return stored;
 
   try {
     const resp = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`, {
@@ -1680,10 +1685,11 @@ async function ensureAirtableTables(pat) {
     await ensureFieldExists(pat, lineItemsTable, 'Masterbox Qty', { type: 'number', options: { precision: 0 } });
     const choicesOk = await ensureSelectChoices(pat, requestsTable, 'Status', [
       { name: 'Shipped', color: 'purpleLight2' },
+      { name: 'Delivered', color: 'tealLight2' },
       { name: 'Cancelled', color: 'redLight2' }
     ]);
 
-    const ids = { requestsTableId: requestsTable.id, lineItemsTableId: lineItemsTable.id, fieldsUpgraded: true, statusChoicesV2: choicesOk, masterboxFieldAdded: true };
+    const ids = { requestsTableId: requestsTable.id, lineItemsTableId: lineItemsTable.id, fieldsUpgraded: true, statusChoicesV3: choicesOk, masterboxFieldAdded: true };
     saveTableIds(ids);
     return ids;
   } catch(e) {
@@ -1759,6 +1765,7 @@ async function createRequestsTable(pat) {
         { name: 'For Approval', color: 'blueLight2' },
         { name: 'Approved', color: 'greenLight2' },
         { name: 'Shipped', color: 'purpleLight2' },
+        { name: 'Delivered', color: 'tealLight2' },
         { name: 'Cancelled', color: 'redLight2' }
       ]}},
       { name: 'Notes', type: 'multilineText' }
@@ -2231,7 +2238,7 @@ async function loadFromAirtable() {
       const totalItems = f['Total Items'] || 0;
       const totalUnits = f['Total Units'] || 0;
       const totalPieces = f['Total Pieces'] || 0;
-      const statusColor = status === 'Approved' ? '#27ae60' : status === 'For Approval' ? '#0c5460' : status === 'Shipped' ? '#6c3483' : status === 'Cancelled' ? '#922b21' : '#856404';
+      const statusColor = status === 'Approved' ? '#27ae60' : status === 'For Approval' ? '#0c5460' : status === 'Shipped' ? '#6c3483' : status === 'Delivered' ? '#0e6655' : status === 'Cancelled' ? '#922b21' : '#856404';
       return `<div class="at-card" onclick="viewAirtableRequest('${refId}','${esc(title)}','${esc(subtitle)}','${date}','${status}')">
         <div class="at-info">
           <div class="at-title"><span class="at-badge">${esc(refId)}</span>${esc(subtitle || title)}
