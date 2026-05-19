@@ -69,6 +69,7 @@ Each item row has a **Type** dropdown (first column):
 - Status is persisted in state and shown as a color-coded badge on list cards
 - Pushed to Airtable on every push (both create and update)
 - **Approved, Shipped, and Delivered requests cannot be deleted** (defined in `PROTECTED_STATUSES`) — Delete button is hidden on both list cards and editor bar; status change back re-enables deletion
+- **Auto-Delivered sync**: an Airtable Automation (`airtable-automations/weekly-delivery-sync.js`) runs Friday 3 PM Manila time. It scans the SCM Shipment Tracker's `Shipments` table for each Re-order's linked shipments (via `Reorder_Ref`) and, when all are `CLOSED_FULLY_RECEIVED` / `CLOSED_WITH_DISCREPANCY`, flips Status to Delivered and appends an audit line to Notes. Only flips Approved/Shipped re-orders. The .js file is the source of truth; the runtime copy lives inside the Airtable Automation — edits must be re-pasted.
 
 ## Push to Airtable
 - **Manual only** — triggered by explicit "Push to Airtable" button in editor bar
