@@ -296,6 +296,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
   <div id="airtableRequests" style="margin-bottom:16px"></div>
   <div class="request-list" id="requestList"></div>
   <div id="asinSummary" style="margin-top:24px"></div>
+  <div id="archivedRequests" style="margin-top:16px"></div>
 </div>
 
 <!-- ======== EDITOR SCREEN ======== -->
@@ -594,6 +595,8 @@ const ALL_STATUSES = ['Draft','For Approval','Approved','Shipped','Delivered','C
 const ASIN_SUMMARY_STATE = { filter: '', statusSet: new Set(ALL_STATUSES), sortKey: 'status', sortDir: 'asc', collapsed: false };
 const STATUS_ORDER = { 'Draft':1, 'For Approval':2, 'Approved':3, 'Shipped':4, 'Delivered':5, 'Cancelled':6 };
 const PROTECTED_STATUSES = ['Approved','Shipped','Delivered'];
+const ARCHIVED_STATUSES = ['Delivered','Cancelled'];
+const ARCHIVED_STATE = { collapsed: true };
 
 function buildAsinSummaryRows() {
   const reqs = getAllRequests();
@@ -730,11 +733,11 @@ function renderRequestList() {
   renderAsinSummary();
   const reqs = getAllRequests();
   const el = document.getElementById('requestList');
-  if (reqs.length === 0) {
-    el.innerHTML = '<div class="empty-state">No re-order requests yet. Click <strong>+ New Request</strong> to get started.</div>';
-    return;
-  }
-  el.innerHTML = reqs.map(r => {
+  const archEl = document.getElementById('archivedRequests');
+  const active = reqs.filter(r => !ARCHIVED_STATUSES.includes((r.state || {}).status || 'Draft'));
+  const archived = reqs.filter(r => ARCHIVED_STATUSES.includes((r.state || {}).status || 'Draft'));
+
+  const cardHtml = (r) => {
     const s = r.state || {};
     const title = s.hdrSubtitle || s.hdrTitle || 'Untitled';
     const date = s.hdrDate || r.createdAt?.slice(0,10) || '';
@@ -754,7 +757,37 @@ function renderRequestList() {
       <div class="rc-date">${esc(date)}</div>
       ${PROTECTED_STATUSES.includes(s.status || 'Draft') ? '' : `<button class="rc-del" onclick="event.stopPropagation();deleteRequest('${r.id}')">Delete</button>`}
     </div>`;
-  }).join('');
+  };
+
+  if (reqs.length === 0) {
+    el.innerHTML = '<div class="empty-state">No re-order requests yet. Click <strong>+ New Request</strong> to get started.</div>';
+  } else if (active.length === 0) {
+    el.innerHTML = '<div class="empty-state">No active requests. Archived requests are listed below.</div>';
+  } else {
+    el.innerHTML = active.map(cardHtml).join('');
+  }
+
+  if (archEl) {
+    if (archived.length === 0) {
+      archEl.innerHTML = '';
+    } else {
+      archEl.innerHTML = `<div class="asin-summary${ARCHIVED_STATE.collapsed?' collapsed':''}">
+        <div class="asin-summary-head" onclick="toggleArchivedRequests()" style="background:#0e6655">
+          <h3>Archived (Delivered &amp; Cancelled)</h3>
+          <span class="count-badge">${archived.length} request${archived.length===1?'':'s'}</span>
+          <span class="toggle-arrow">▼</span>
+        </div>
+        <div class="asin-summary-body" style="padding:14px 18px">
+          <div class="request-list">${archived.map(cardHtml).join('')}</div>
+        </div>
+      </div>`;
+    }
+  }
+}
+
+function toggleArchivedRequests() {
+  ARCHIVED_STATE.collapsed = !ARCHIVED_STATE.collapsed;
+  renderRequestList();
 }
 
 function createNewRequest() {
