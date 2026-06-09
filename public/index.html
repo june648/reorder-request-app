@@ -340,10 +340,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
       <input id="hdrSubtitle" value="DOT and Pearl Reorder">
     </div>
     <div class="field date-field">
-      <label>Date</label>
-      <input type="date" id="hdrDate">
-    </div>
-    <div class="field date-field">
       <label>Created</label>
       <input type="date" id="dateCreated" onchange="autoSaveCurrentRequest()">
     </div>
@@ -757,7 +753,7 @@ function renderRequestList() {
   const cardHtml = (r) => {
     const s = r.state || {};
     const title = s.hdrSubtitle || s.hdrTitle || 'Untitled';
-    const date = s.hdrDate || r.createdAt?.slice(0,10) || '';
+    const date = s.dateCreated || r.createdAt?.slice(0,10) || '';
     const dCreated = s.dateCreated || r.createdAt?.slice(0,10) || '';
     const dApproved = s.dateApproved || '';
     const dSent = s.dateSent || '';
@@ -899,7 +895,7 @@ function deleteRequest(id) {
 
 function updateEditorBar() {
   const title = document.getElementById('hdrSubtitle').value || document.getElementById('hdrTitle').value || 'Untitled';
-  const date = document.getElementById('hdrDate').value || '';
+  const date = document.getElementById('dateCreated').value || '';
   document.getElementById('ebarTitle').textContent = title;
   document.getElementById('ebarSub').textContent = `${document.getElementById('hdrTitle').value} \u00b7 ${date}`;
   document.getElementById('ebarRefId').textContent = currentRefId || '';
@@ -1296,7 +1292,7 @@ function totalItems() {
 function renderOhadView() {
   const title = document.getElementById('hdrTitle').value;
   const subtitle = document.getElementById('hdrSubtitle').value;
-  const date = document.getElementById('hdrDate').value;
+  const date = document.getElementById('dateCreated').value;
   const notes = document.getElementById('summaryNotes').value;
   const tot = totalItems();
 
@@ -1335,7 +1331,7 @@ function renderOhadView() {
 function renderSupplierView() {
   const title = document.getElementById('hdrTitle').value;
   const subtitle = document.getElementById('hdrSubtitle').value;
-  const date = document.getElementById('hdrDate').value;
+  const date = document.getElementById('dateCreated').value;
   const notes = document.getElementById('summaryNotes').value;
   const tot = totalItems();
 
@@ -1437,13 +1433,13 @@ function downloadExcel(mode) {
   if (mode === 'ohad' || mode === 'both') { XLSX.utils.book_append_sheet(wb, buildOhadSheet(), 'Sir Ohad View'); }
   if (mode === 'supplier' || mode === 'both') { XLSX.utils.book_append_sheet(wb, buildSupplierSheet(), 'Supplier View'); }
   const subtitle = document.getElementById('hdrSubtitle').value.replace(/[^a-zA-Z0-9 ]/g,'').trim().replace(/\s+/g,'_');
-  XLSX.writeFile(wb, `ReOrder_${subtitle}_${document.getElementById('hdrDate').value}.xlsx`);
+  XLSX.writeFile(wb, `ReOrder_${subtitle}_${document.getElementById('dateCreated').value}.xlsx`);
 }
 
 function buildOhadSheet() {
   const title = document.getElementById('hdrTitle').value;
   const subtitle = document.getElementById('hdrSubtitle').value;
-  const date = document.getElementById('hdrDate').value;
+  const date = document.getElementById('dateCreated').value;
   const notes = document.getElementById('summaryNotes').value;
   const tot = totalItems();
   const COLS = 7;
@@ -1532,7 +1528,7 @@ function buildOhadSheet() {
 function buildSupplierSheet() {
   const title = document.getElementById('hdrTitle').value;
   const subtitle = document.getElementById('hdrSubtitle').value;
-  const date = document.getElementById('hdrDate').value;
+  const date = document.getElementById('dateCreated').value;
   const notes = document.getElementById('summaryNotes').value;
   const tot = totalItems();
   const COLS = 6;
@@ -1636,7 +1632,6 @@ function gatherState() {
   return {
     hdrTitle: document.getElementById('hdrTitle').value,
     hdrSubtitle: document.getElementById('hdrSubtitle').value,
-    hdrDate: document.getElementById('hdrDate').value,
     dateCreated: document.getElementById('dateCreated').value,
     dateApproved: document.getElementById('dateApproved').value,
     dateSent: document.getElementById('dateSent').value,
@@ -1655,8 +1650,7 @@ function applyState(s) {
   s = migrateStateToNShipments(s);
   if(s.hdrTitle!==undefined) document.getElementById('hdrTitle').value=s.hdrTitle;
   if(s.hdrSubtitle!==undefined) document.getElementById('hdrSubtitle').value=s.hdrSubtitle;
-  if(s.hdrDate) document.getElementById('hdrDate').value=s.hdrDate;
-  document.getElementById('dateCreated').value = s.dateCreated || '';
+  document.getElementById('dateCreated').value = s.dateCreated || s.hdrDate || '';
   document.getElementById('dateApproved').value = s.dateApproved || '';
   document.getElementById('dateSent').value = s.dateSent || '';
   if(s.exchangeRate) {
@@ -1681,7 +1675,6 @@ function resetEditorDefaults() {
   shipmentIdCounter = 2;
   document.getElementById('hdrTitle').value = 'REORDER & SHIPMENT PLAN';
   document.getElementById('hdrSubtitle').value = '';
-  document.getElementById('hdrDate').value = new Date().toISOString().slice(0,10);
   document.getElementById('dateCreated').value = new Date().toISOString().slice(0,10);
   document.getElementById('dateApproved').value = '';
   document.getElementById('dateSent').value = '';
@@ -1820,7 +1813,9 @@ async function createRequestsTable(pat) {
       { name: 'Reference ID', type: 'singleLineText' },
       { name: 'Title', type: 'singleLineText' },
       { name: 'Subtitle', type: 'singleLineText' },
-      { name: 'Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
+      { name: 'Created Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
+      { name: 'Approval Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
+      { name: 'Order Sent Date', type: 'date', options: { dateFormat: { name: 'iso' } } },
       { name: 'Shipments Config', type: 'multilineText' },
       { name: 'S1 Method', type: 'singleLineText' },
       { name: 'S1 Destination', type: 'singleLineText' },
@@ -1919,7 +1914,6 @@ async function pushToAirtable() {
       'Reference ID': req.refId,
       'Title': document.getElementById('hdrTitle').value,
       'Subtitle': document.getElementById('hdrSubtitle').value,
-      'Date': document.getElementById('hdrDate').value || null,
       'Created Date': document.getElementById('dateCreated').value || null,
       'Approval Date': document.getElementById('dateApproved').value || null,
       'Order Sent Date': document.getElementById('dateSent').value || null,
@@ -2310,7 +2304,7 @@ async function loadFromAirtable() {
       const refId = f['Reference ID'] || '—';
       const title = f['Title'] || 'Untitled';
       const subtitle = f['Subtitle'] || '';
-      const date = f['Date'] || '';
+      const date = f['Created Date'] || f['Date'] || '';
       const status = f['Status'] || '';
       const totalItems = f['Total Items'] || 0;
       const totalUnits = f['Total Units'] || 0;
@@ -2556,8 +2550,7 @@ function buildStateFromAirtable(reqRecord, itemRecords) {
   const state = {
     hdrTitle: rf['Title'] || 'REORDER & SHIPMENT PLAN',
     hdrSubtitle: rf['Subtitle'] || '',
-    hdrDate: rf['Date'] || '',
-    dateCreated: rf['Created Date'] || '',
+    dateCreated: rf['Created Date'] || rf['Date'] || '',
     dateApproved: rf['Approval Date'] || '',
     dateSent: rf['Order Sent Date'] || '',
     exchangeRate: exRate || liveExchangeRate,
