@@ -38,6 +38,11 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f6f
 .request-card .rc-stats .stat{text-align:center}
 .request-card .rc-stats .stat .sv{font-size:16px;font-weight:700;color:#333}
 .request-card .rc-date{font-size:12px;color:#999;min-width:90px;text-align:right}
+.request-card .rc-dates{display:flex;flex-direction:column;gap:3px;min-width:150px}
+.request-card .rc-dates .rcd-row{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.request-card .rc-dates .rcd-label{color:#aaa;text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:.4px}
+.request-card .rc-dates .rcd-val{color:#555;font-weight:600;font-size:12px}
+.request-card .rc-dates .rcd-val.empty{color:#ccc;font-weight:400}
 .request-card .rc-del{background:#ff4d4f;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;opacity:.7;transition:opacity .15s}
 .request-card .rc-del:hover{opacity:1}
 .empty-state{text-align:center;padding:60px 20px;color:#999;font-size:15px}
@@ -337,6 +342,18 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
     <div class="field date-field">
       <label>Date</label>
       <input type="date" id="hdrDate">
+    </div>
+    <div class="field date-field">
+      <label>Created</label>
+      <input type="date" id="dateCreated" onchange="autoSaveCurrentRequest()">
+    </div>
+    <div class="field date-field">
+      <label>Approved</label>
+      <input type="date" id="dateApproved" onchange="autoSaveCurrentRequest()">
+    </div>
+    <div class="field date-field">
+      <label title="Date the order was sent to the supplier (pending payment)">Order Sent</label>
+      <input type="date" id="dateSent" title="Date the order was sent to the supplier (pending payment)" onchange="autoSaveCurrentRequest()">
     </div>
     <div class="field" style="min-width:180px">
       <label>Exchange Rate (1 CNY → USD)</label>
@@ -741,6 +758,10 @@ function renderRequestList() {
     const s = r.state || {};
     const title = s.hdrSubtitle || s.hdrTitle || 'Untitled';
     const date = s.hdrDate || r.createdAt?.slice(0,10) || '';
+    const dCreated = s.dateCreated || r.createdAt?.slice(0,10) || '';
+    const dApproved = s.dateApproved || '';
+    const dSent = s.dateSent || '';
+    const dateRow = (lbl, v) => `<div class="rcd-row"><span class="rcd-label">${lbl}</span><span class="rcd-val${v?'':' empty'}">${esc(v||'—')}</span></div>`;
     const itemCount = (s.items || []).length;
     const totalUnits = (s.items || []).reduce((a,i) => a + getItemTotalUnits(i), 0);
     const totalPieces = (s.items || []).reduce((a,i) => a + getItemTotalUnits(i) * (i.packQty||1), 0);
@@ -754,7 +775,11 @@ function renderRequestList() {
         <div class="stat"><div class="sv">${fmtN(totalUnits)}</div>units</div>
         <div class="stat"><div class="sv">${fmtN(totalPieces)}</div>pieces</div>
       </div>
-      <div class="rc-date">${esc(date)}</div>
+      <div class="rc-dates">
+        ${dateRow('Created', dCreated)}
+        ${dateRow('Approved', dApproved)}
+        ${dateRow('Order Sent', dSent)}
+      </div>
       ${PROTECTED_STATUSES.includes(s.status || 'Draft') ? '' : `<button class="rc-del" onclick="event.stopPropagation();deleteRequest('${r.id}')">Delete</button>`}
     </div>`;
   };
@@ -809,6 +834,9 @@ function openRequest(id) {
   if (req && req.state) {
     applyState(req.state);
   }
+  // Backfill Created date from the request's creation timestamp if it was never set
+  const dc = document.getElementById('dateCreated');
+  if (dc && !dc.value) dc.value = req.createdAt?.slice(0,10) || new Date().toISOString().slice(0,10);
   if (items.length === 0) addItemRow();
   renderShipmentConfig();
   renderItems();
@@ -1609,6 +1637,9 @@ function gatherState() {
     hdrTitle: document.getElementById('hdrTitle').value,
     hdrSubtitle: document.getElementById('hdrSubtitle').value,
     hdrDate: document.getElementById('hdrDate').value,
+    dateCreated: document.getElementById('dateCreated').value,
+    dateApproved: document.getElementById('dateApproved').value,
+    dateSent: document.getElementById('dateSent').value,
     exchangeRate: parseFloat(document.getElementById('hdrExRate').value) || null,
     shipments: shipments,
     shipmentIdCounter: shipmentIdCounter,
@@ -1625,6 +1656,9 @@ function applyState(s) {
   if(s.hdrTitle!==undefined) document.getElementById('hdrTitle').value=s.hdrTitle;
   if(s.hdrSubtitle!==undefined) document.getElementById('hdrSubtitle').value=s.hdrSubtitle;
   if(s.hdrDate) document.getElementById('hdrDate').value=s.hdrDate;
+  document.getElementById('dateCreated').value = s.dateCreated || '';
+  document.getElementById('dateApproved').value = s.dateApproved || '';
+  document.getElementById('dateSent').value = s.dateSent || '';
   if(s.exchangeRate) {
     document.getElementById('hdrExRate').value = s.exchangeRate;
     document.getElementById('hdrExRate').dataset.autoSet = 'false';
@@ -1648,6 +1682,9 @@ function resetEditorDefaults() {
   document.getElementById('hdrTitle').value = 'REORDER & SHIPMENT PLAN';
   document.getElementById('hdrSubtitle').value = '';
   document.getElementById('hdrDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('dateCreated').value = new Date().toISOString().slice(0,10);
+  document.getElementById('dateApproved').value = '';
+  document.getElementById('dateSent').value = '';
   document.getElementById('hdrExRate').value = liveExchangeRate.toFixed(4);
   document.getElementById('hdrExRate').dataset.autoSet = 'true';
   updateExRateStatus('Live rate');
@@ -1691,7 +1728,7 @@ function saveTableIds(ids) {
 
 async function ensureAirtableTables(pat) {
   const stored = getStoredTableIds();
-  if (stored && stored.requestsTableId && stored.lineItemsTableId && stored.fieldsUpgraded && stored.statusChoicesV3 && stored.masterboxFieldAdded) return stored;
+  if (stored && stored.requestsTableId && stored.lineItemsTableId && stored.fieldsUpgraded && stored.statusChoicesV3 && stored.masterboxFieldAdded && stored.milestoneDatesAdded) return stored;
 
   try {
     const resp = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`, {
@@ -1716,13 +1753,17 @@ async function ensureAirtableTables(pat) {
     await ensureFieldExists(pat, requestsTable, 'Shipments Config', { type: 'multilineText' });
     await ensureFieldExists(pat, lineItemsTable, 'Units By Shipment', { type: 'multilineText' });
     await ensureFieldExists(pat, lineItemsTable, 'Masterbox Qty', { type: 'number', options: { precision: 0 } });
+    const dateOpts = { type: 'date', options: { dateFormat: { name: 'iso', format: 'YYYY-MM-DD' } } };
+    await ensureFieldExists(pat, requestsTable, 'Created Date', dateOpts);
+    await ensureFieldExists(pat, requestsTable, 'Approval Date', dateOpts);
+    await ensureFieldExists(pat, requestsTable, 'Order Sent Date', dateOpts);
     const choicesOk = await ensureSelectChoices(pat, requestsTable, 'Status', [
       { name: 'Shipped', color: 'purpleLight2' },
       { name: 'Delivered', color: 'tealLight2' },
       { name: 'Cancelled', color: 'redLight2' }
     ]);
 
-    const ids = { requestsTableId: requestsTable.id, lineItemsTableId: lineItemsTable.id, fieldsUpgraded: true, statusChoicesV3: choicesOk, masterboxFieldAdded: true };
+    const ids = { requestsTableId: requestsTable.id, lineItemsTableId: lineItemsTable.id, fieldsUpgraded: true, statusChoicesV3: choicesOk, masterboxFieldAdded: true, milestoneDatesAdded: true };
     saveTableIds(ids);
     return ids;
   } catch(e) {
@@ -1879,6 +1920,9 @@ async function pushToAirtable() {
       'Title': document.getElementById('hdrTitle').value,
       'Subtitle': document.getElementById('hdrSubtitle').value,
       'Date': document.getElementById('hdrDate').value || null,
+      'Created Date': document.getElementById('dateCreated').value || null,
+      'Approval Date': document.getElementById('dateApproved').value || null,
+      'Order Sent Date': document.getElementById('dateSent').value || null,
       'Shipments Config': JSON.stringify(shipments),
       'S1 Method': shipments[0] ? shipments[0].method : '',
       'S1 Destination': shipments[0] ? shipments[0].destination : '',
@@ -2513,6 +2557,9 @@ function buildStateFromAirtable(reqRecord, itemRecords) {
     hdrTitle: rf['Title'] || 'REORDER & SHIPMENT PLAN',
     hdrSubtitle: rf['Subtitle'] || '',
     hdrDate: rf['Date'] || '',
+    dateCreated: rf['Created Date'] || '',
+    dateApproved: rf['Approval Date'] || '',
+    dateSent: rf['Order Sent Date'] || '',
     exchangeRate: exRate || liveExchangeRate,
     shipments: importedShipments || [
       { id: 1, method: 'AIR', destination: 'FBA (USA)', label: '', description: '' },

@@ -27,7 +27,8 @@ A single-page HTML app for managing re-order requests and shipment plans. Replac
     - `Yun Description` (fldffzSXF7Tsjs8xD)
     - `Masterbox Quantity` (units per masterbox; used to compute total masterboxes in Sir Ohad view)
 - **Reorder Requests Table** (auto-created on first push) — master request records
-  - Fields: Reference ID, Title, Subtitle, Date, Shipments Config (JSON), S1/S2 Method/Destination/Description (backward compat), S1–S10 Name (shipment labels), Total Items/Units/Pieces, Total Cost RMB/USD, Exchange Rate, Status (Draft/For Approval/Approved), Notes
+  - Fields: Reference ID, Title, Subtitle, Date, Created Date, Approval Date, Order Sent Date, Shipments Config (JSON), S1/S2 Method/Destination/Description (backward compat), S1–S10 Name (shipment labels), Total Items/Units/Pieces, Total Cost RMB/USD, Exchange Rate, Status (Draft/For Approval/Approved), Notes
+  - **Milestone dates** (Created Date / Approval Date / Order Sent Date): three manual date pickers in the editor header (next to "Date"), persisted in state as `dateCreated`/`dateApproved`/`dateSent`. Shown stacked on every list card (Created / Approved / Order Sent). "Created" backfills from the request's `createdAt` if never set. "Order Sent" = date the order was sent to the supplier (pending payment). Synced to Airtable as date fields and read back via `buildStateFromAirtable`, so they survive the silent Load-from-Airtable overwrite. Schema-ensure gated by `milestoneDatesAdded` flag.
 - **Reorder Line Items Table** (auto-created on first push) — individual product rows, linked to parent request
   - Fields: Reference ID (primary), Request (linked record), ASIN, Product Name, UPC, FNSKU, Yun Description, Type (Catalog/New Product), Pack Qty, Masterbox Qty, Cost Per Piece RMB, Units By Shipment (JSON), S1–S10 Units, Total Units, Total Pieces, Cost RMB, Cost USD
 - Table IDs cached in localStorage under `airtable_reorder_tables` key
