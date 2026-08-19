@@ -2193,6 +2193,62 @@ async function fixDuplicateAirtableRefIds(requests, pat) {
   }
 }
 
+async function fetchAllRequests(pat) {
+  const sortCandidates = ['Created Date', 'Date', null];
+  let lastErr = null;
+
+  for (const sortField of sortCandidates) {
+    const records = [];
+    let offset = '';
+    let failedOnSort = false;
+
+    do {
+      const params = new URLSearchParams();
+      params.set('pageSize', '100');
+      if (sortField) {
+        params.set('sort[0][field]', sortField);
+        params.set('sort[0][direction]', 'desc');
+      }
+      if (offset) params.set('offset', offset);
+
+      const resp = await fetch(`https://api.airtable.com/v0/${AT_BASE}/Reorder%20Requests?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${pat}` }
+      });
+
+      if (!resp.ok) {
+        const detail = await resp.text().catch(() => '');
+        // 422 = unprocessable, which is what Airtable returns for an unknown sort field.
+        if (resp.status === 422 && sortField) { failedOnSort = true; break; }
+        let msg = `Failed: ${resp.status}`;
+        try {
+          const parsed = JSON.parse(detail);
+          const e = parsed && parsed.error;
+          if (e) msg += ` - ${typeof e === 'string' ? e : (e.message || e.type || '')}`;
+        } catch (_) { if (detail) msg += ` - ${detail.slice(0, 200)}`; }
+        throw new Error(msg);
+      }
+
+      const data = await resp.json();
+      records.push(...data.records);
+      offset = data.offset || '';
+    } while (offset);
+
+    if (failedOnSort) { lastErr = new Error(`Sort field "${sortField}" not found in Airtable`); continue; }
+
+    // Always order client-side too, so the list is consistent no matter which
+    // (or whether any) sort field the base has.
+    records.sort((a, b) => {
+      const da = a.fields['Created Date'] || a.fields['Date'] || '';
+      const db = b.fields['Created Date'] || b.fields['Date'] || '';
+      if (da === db) return (b.fields['Reference ID'] || '').localeCompare(a.fields['Reference ID'] || '');
+      return db.localeCompare(da);
+    });
+    return records;
+  }
+
+  throw lastErr || new Error('Failed to load requests from Airtable');
+}
+
 async function loadFromAirtable() {
   const pat = localStorage.getItem('airtable_pat');
   if (!pat) { alert('Please set your Airtable token in Settings first.'); return; }
@@ -2201,13 +2257,11 @@ async function loadFromAirtable() {
   el.innerHTML = '<div style="text-align:center;color:#888;padding:20px">Loading from Airtable...</div>';
 
   try {
-    // Fetch all reorder requests
-    const reqResp = await fetch(`https://api.airtable.com/v0/${AT_BASE}/Reorder%20Requests?sort%5B0%5D%5Bfield%5D=Date&sort%5B0%5D%5Bdirection%5D=desc&pageSize=100`, {
-      headers: { Authorization: `Bearer ${pat}` }
-    });
-    if (!reqResp.ok) throw new Error(`Failed: ${reqResp.status}`);
-    const reqData = await reqResp.json();
-    const requests = reqData.records;
+    // Fetch all reorder requests (paginated). Sort server-side by Created Date when
+    // that field exists; older bases may still only have the legacy "Date" field, and
+    // some have neither -- Airtable answers an unknown sort field with a 422, so fall
+    // back through the candidates and finally to no sort at all.
+    const requests = await fetchAllRequests(pat);
 
     if (requests.length === 0) {
       el.innerHTML = '<div style="text-align:center;color:#888;padding:20px">No re-order requests found in Airtable.</div>';
